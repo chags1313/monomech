@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "monomech"
+version = "0.4.0"
+description = "Notebook-first monocular biomechanics with modular 2D/3D pose, PnP, global pose, forces, and OpenSim workflows."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = "MIT"
+authors = [
+  { name = "Your Name", email = "you@example.com" }
+]
+keywords = ["biomechanics", "pose-estimation", "mediapipe", "opensim", "kinematics", "inverse-kinematics"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+dependencies = [
+  "numpy>=1.24",
+  "pandas>=2.0",
+  "opencv-python>=4.8",
+  "plotly>=5.18",
+  "typing-extensions>=4.8",
+  "mediapipe>=0.10.33",
+  "ipython>=8.0",
+  "ipywidgets>=8.1",
+  "opensim>=4.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.5", "build>=1.2", "twine>=6.0"]
+
+[project.urls]
+Homepage = "https://github.com/your-github-username/monomech"
+Repository = "https://github.com/your-github-username/monomech"
+Documentation = "https://your-github-username.github.io/monomech/"
+Issues = "https://github.com/your-github-username/monomech/issues"
+
+[project.scripts]
+monomech = "monomech.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/monomech"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]

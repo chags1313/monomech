@@ -1,0 +1,75 @@
+site_name: monomech
+site_description: Notebook-first monocular biomechanics with MediaPipe, PnP, global pose, semantic forces, and OpenSim workflows.
+site_url: https://your-github-username.github.io/monomech/
+repo_url: https://github.com/your-github-username/monomech
+repo_name: your-github-username/monomech
+edit_uri: edit/main/docs/
+copyright: Copyright © 2026 monomech contributors
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Examples: examples.md
+  - Modular stages:
+      - Overview: stages/index.md
+      - pose2d: stages/pose2d.md
+      - world3d: stages/world3d.md
+      - pnp: stages/pnp.md
+      - global_pose: stages/global-pose.md
+      - forces: stages/forces.md
+      - OpenSim: stages/opensim.md
+      - Full pipeline wrapper: stages/full-pipeline.md
+  - Outputs and files: outputs.md
+  - GATMA model guide: gatma-model.md
+  - GitHub and releases:
+      - Docs site and Pages: github-pages.md
+      - Repository setup: GITHUB_SETUP.md
+      - Publishing: PUBLISHING.md
+      - Releasing: RELEASING.md
+      - Development: DEVELOPMENT.md
+      - FAQ: FAQ.md

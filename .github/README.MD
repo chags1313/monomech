@@ -1,4 +1,4 @@
-# monomech
+# Monomech (Moncolar Biomechanics)
 
 `monomech` is a modular monocular biomechanics library for turning video into inspectable kinematics, OpenSim-ready artifacts, and analysis-friendly tables.
 

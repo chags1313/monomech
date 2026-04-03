@@ -38,16 +38,6 @@ Useful entry points:
 - GitHub Pages docs site: `https://your-github-username.github.io/monomech/`
 
 
-
-## Documentation website
-
-This repository is set up to publish a full documentation site with **GitHub Pages + MkDocs**.
-
-Planned docs URL pattern:
-- `https://your-github-username.github.io/monomech/`
-
-After you put the repository on GitHub and enable Pages with the included workflow, the Markdown docs in `docs/` become a browsable site with navigation, search, and deep links.
-
 ## Installation
 
 ### From PyPI
@@ -113,9 +103,7 @@ run = pipeline.run("subject01.mp4", output_dir="outputs/subject01")
 run.global_pose.tables["summary"]
 ```
 
-## GATMA exact-model support
-
-This repository includes a **GATMA-specific OpenSim preset** based on your original workflow.
+## OSIM model support
 
 Highlights:
 

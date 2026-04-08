@@ -11,7 +11,6 @@ It is designed for researchers, clinicians, and biomechanists who want a practic
 MonoMech is built to be:
 
 - **easy to use in notebooks**
-- **clear and explicit about file outputs**
 - **flexible enough for both pose-based and mocap-based workflows**
 - **organized around real biomechanics deliverables**
 

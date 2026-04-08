@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "monomech"
+version = "0.14.0"
+description = "Single camera biomechanics library"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10,<3.13"
+authors = [
+  { name = "Cole Hagen" }
+]
+keywords = ["biomechanics", "opensim", "monocular", "pose-estimation", "motion-capture"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Healthcare Industry",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Scientific/Engineering",
+]
+
+dependencies = [
+  "numpy>=1.26,<2.1",
+  "pandas>=2.2,<3",
+  "imageio>=2.34,<3",
+  "packaging>=24,<26",
+  "scipy>=1.13,<1.15",
+  "matplotlib>=3.8,<4",
+  "mediapipe>=0.10.31,<0.11",
+  "opencv-python-headless>=4.8,<5",
+  "pyopensim>=4.5.2.0,<5",
+]
+
+[project.optional-dependencies]
+notebook = [
+  "jupyter>=1,<2",
+  "ipykernel>=6,<7",
+]
+dev = [
+  "pytest>=8,<9",
+  "ruff>=0.6,<1",
+  "build>=1.2,<2",
+  "twine>=5,<6",
+]
+
+[project.urls]
+Homepage = "https://pypi.org/project/monomech/"
+Documentation = "https://github.com/chags1313/monomech"
+Repository = "https://github.com/chags1313/monomech"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+monomech = [
+  "data/*.osim",
+  "data/*.task",
+  "py.typed",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

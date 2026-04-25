@@ -1,8 +1,8 @@
 site_name: monomech
 site_description: Notebook-first monocular biomechanics with MediaPipe, PnP, global pose, semantic forces, and OpenSim workflows.
-site_url: https://your-github-username.github.io/monomech/
-repo_url: https://github.com/your-github-username/monomech
-repo_name: your-github-username/monomech
+site_url: https://chags1313.github.io/monomech/
+repo_url: https://github.com/chags1313/monomech
+repo_name: chags1313/monomech
 edit_uri: edit/main/docs/
 copyright: Copyright © 2026 monomech contributors
 
@@ -19,14 +19,14 @@ theme:
     - content.code.copy
   palette:
     - scheme: default
-      primary: indigo
-      accent: blue
+      primary: teal
+      accent: deep orange
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
     - scheme: slate
-      primary: indigo
-      accent: blue
+      primary: teal
+      accent: deep orange
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode

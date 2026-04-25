@@ -1,101 +1,68 @@
-# GitHub setup guide
+# GitHub Setup Guide
 
-Use this guide when you first create the GitHub repository.
+This repository is already configured for GitHub, GitHub Actions, GitHub Pages, and PyPI Trusted Publishing. Use this page as the maintenance checklist for repository settings.
 
-## 1. Create the repository
+## Repository
 
-Create a new GitHub repository, then push the project:
+Repository:
 
-```bash
-git init
-git add .
-git commit -m "Initial monomech release"
-git branch -M main
-git remote add origin https://github.com/YOUR_GITHUB_USERNAME/monomech.git
-git push -u origin main
+```text
+https://github.com/chags1313/monomech
 ```
 
-## 2. Update repository metadata
+Recommended settings:
 
-Before making the repo public, update:
+- Issues enabled
+- Actions enabled
+- Pages source set to GitHub Actions
+- branch protection on `main` once the release flow is stable
 
-- `pyproject.toml`
-  - author name
-  - author email
-  - homepage URL
-  - repository URL
-  - documentation URL
-  - issues URL
-- `README.md`
-  - badges if you want them
-  - example install commands if the package name changes
+## Branch Protection
 
-## 3. Configure repository settings
+For `main`, consider requiring:
 
-Recommended GitHub settings:
+- CI
+- Publish distributions build job
+- Docs build once documentation is ready to gate releases
+- pull request review before merge
 
-### General
-- enable Issues
-- enable Discussions if you want design conversations in GitHub
-- enable Projects only if you plan to use them
+Avoid force pushes to `main`. Force-updating release tags should be reserved for cases where the tag workflow failed before publishing any artifact.
 
-### Branch protection
-Protect `main`:
-- require pull request before merging
-- require status checks to pass
-- prevent force pushes
+## GitHub Pages
 
-### Actions
-Allow GitHub Actions to run the included workflows.
+The docs workflow publishes the MkDocs site to:
 
-## 4. Secrets and credentials
+```text
+https://chags1313.github.io/monomech/
+```
 
-With Trusted Publishing, you do not need a long-lived PyPI token stored in GitHub.
+To enable it:
 
-Still avoid committing:
-- API keys
-- real credentials
-- local paths
-- notebooks containing secrets
+1. Go to **Settings > Pages**.
+2. Set **Source** to **GitHub Actions**.
+3. Push to `main`.
+4. Confirm the Docs workflow succeeds.
 
-## 5. Repository health files already included
+## PyPI Trusted Publishing
 
-This project includes:
+PyPI publishing uses OpenID Connect through GitHub Actions. No long-lived PyPI token is required.
+
+Configure the PyPI project with:
+
+- owner: `chags1313`
+- repository: `monomech`
+- workflow filename: `publish.yml`
+- environment: blank, unless the workflow is changed to use one
+
+## Repository Health Files
+
+The repository includes:
 
 - `README.md`
 - `CONTRIBUTING.md`
 - `CODE_OF_CONDUCT.md`
 - `SECURITY.md`
-- `.github/ISSUE_TEMPLATE/`
-- `.github/PULL_REQUEST_TEMPLATE.md`
+- `CHANGELOG.md`
+- `.github/workflows/`
 
-These make the repository easier to use immediately after publishing.
-
-## 6. First checks after pushing
-
-After the first push, confirm:
-
-- the CI workflow appears in GitHub Actions
-- README renders correctly
-- issue templates appear when creating an issue
-- links in docs point to the right repo name
-
-
-## Enable the GitHub Pages docs site
-
-After the repository is on GitHub:
-
-1. Go to **Settings → Pages**.
-2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-3. Push to `main`.
-4. Confirm `.github/workflows/docs.yml` runs successfully.
-5. Open the published site URL shown in the workflow or Pages settings.
-
-## Replace placeholders before going live
-
-Update these placeholders first:
-
-- `your-github-username` in `mkdocs.yml`
-- `your-github-username` in `pyproject.toml`
-- author name and email in `pyproject.toml`
-- optional custom domain settings if you plan to use one later
+Keep these files current as the package API and release process evolve.

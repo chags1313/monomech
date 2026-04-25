@@ -1,75 +1,60 @@
-# Release guide
+# Releasing
 
-This is the practical release checklist for maintainers.
+Use this checklist for every PyPI release.
 
-## Pre-release checklist
+## Before Tagging
 
-- [ ] all intended code is merged into `main`
-- [ ] tests pass locally
-- [ ] CI passes on GitHub
-- [ ] `README.md` matches the current public API
-- [ ] notebooks still reflect the current workflow
-- [ ] `CHANGELOG.md` is updated
 - [ ] version in `pyproject.toml` is updated
+- [ ] `CHANGELOG.md` has a release section
+- [ ] README examples match the current public API
+- [ ] docs build locally with `mkdocs build --strict`
+- [ ] tests pass with `pytest`
+- [ ] package builds with `python -m build`
+- [ ] PyPI Trusted Publisher is configured for `.github/workflows/publish.yml`
 
-## Dry run
-
-Before a real release:
-
-1. push `main`
-2. confirm CI passes
-3. confirm TestPyPI publish succeeds
-4. install from TestPyPI in a fresh environment
-5. run a smoke test import
-
-Example:
+## Local Smoke Test
 
 ```bash
-python -m venv /tmp/monomech-smoke
-source /tmp/monomech-smoke/bin/activate
-python -m pip install --upgrade pip
-python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple monomech
-python -c "import monomech; print(monomech.__version__)"
+python -m build
+python -m venv .venv-smoke
+.venv-smoke\Scripts\python -m pip install dist\monomech-0.15.1-py3-none-any.whl
+.venv-smoke\Scripts\python -c "import monomech as mm; print(mm.list_builtin_osim_models())"
 ```
 
-## Release steps
+## Tag the Release
 
 ```bash
 git checkout main
 git pull
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.15.1
+git push origin v0.15.1
 ```
 
-Then:
+## Watch GitHub Actions
 
-- watch the publish workflow
-- verify the new version on PyPI
-- verify `pip install monomech` works
+Confirm:
 
-## Post-release checklist
+- the tag-triggered `Publish distributions` run starts
+- `Build distributions` succeeds
+- `Publish to PyPI` succeeds
 
-- [ ] create a GitHub Release entry
-- [ ] copy the key notes from `CHANGELOG.md`
-- [ ] verify installation from PyPI
-- [ ] verify documentation links still work
+## After Publishing
 
-## Hotfix flow
+```bash
+python -m venv .venv-pypi-check
+.venv-pypi-check\Scripts\python -m pip install monomech==0.15.1
+.venv-pypi-check\Scripts\python -c "import monomech as mm; print(mm.list_builtin_osim_models())"
+```
 
-For a packaging-only or release-only fix:
+Then create a GitHub Release using the notes from `CHANGELOG.md`.
 
-1. make the smallest possible change
-2. bump the version
-3. update `CHANGELOG.md`
-4. tag and release again
+## Hotfixes
 
+For release-only fixes:
 
-## Release checklist for docs
-
-Before tagging a release:
-
-- preview docs locally with `mkdocs serve`
-- ensure navigation reflects the current API
-- update version references in docs if needed
-- confirm the Pages workflow passes on `main`
-- confirm the PyPI publish workflow still matches the project metadata
+1. make the smallest safe change
+2. bump the patch version
+3. update the changelog
+4. run tests and build locally
+5. push `main`
+6. push the new version tag

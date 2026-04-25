@@ -1,103 +1,60 @@
-# Publishing monomech with GitHub Actions and Trusted Publishing
+# Publishing
 
-This repository is set up so that:
+`monomech` publishes through GitHub Actions. The workflow builds distributions on pushes to `main` and publishes to PyPI only when a version tag is pushed.
 
-- pushes to `main` can publish to **TestPyPI**
-- pushes of version tags like `v0.4.0` can publish to **PyPI**
+## Workflow
 
-## How publishing works
+The publishing workflow lives at:
 
-There are two workflows involved:
-
-1. the CI workflow validates the project
-2. the publish workflow builds the distributions and publishes them through GitHub Actions
-
-Publishing is not automatic just because the code is on GitHub. You must first configure TestPyPI and PyPI to trust this repository's workflow.
-
-## 1. Put the project on GitHub
-
-Follow [GITHUB_SETUP.md](GITHUB_SETUP.md) first.
-
-## 2. Replace metadata placeholders
-
-Before publishing, update these values in `pyproject.toml`:
-
-- author name
-- author email
-- homepage URL
-- repository URL
-- documentation URL
-- issues URL
-- version
-
-## 3. Confirm the package name
-
-Check whether `monomech` is available on both PyPI and TestPyPI.
-
-If it is taken, change the project name before your first release.
-
-## 4. Configure Trusted Publishers
-
-### TestPyPI publisher
-
-On TestPyPI, add a pending publisher with:
-
-- owner: your GitHub user or org
-- repository: your repository name
-- workflow filename: `publish.yml`
-- environment: `testpypi`
-- project name: `monomech`
-
-### PyPI publisher
-
-On PyPI, add a pending publisher with:
-
-- owner: your GitHub user or org
-- repository: your repository name
-- workflow filename: `publish.yml`
-- environment: `pypi`
-- project name: `monomech`
-
-## 5. First test publish
-
-Push to `main` or manually trigger the workflow.
-
-That should build the package and publish it to TestPyPI.
-
-Then verify:
-
-```bash
-python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple monomech
-python -c "import monomech; print(monomech.__version__)"
+```text
+.github/workflows/publish.yml
 ```
 
-## 6. Real release to PyPI
+It has two jobs:
 
-When the TestPyPI release looks good:
+- `build`: builds the wheel and source distribution
+- `publish-pypi`: publishes to PyPI when `github.ref` starts with `refs/tags/v`
+
+## Trusted Publishing
+
+PyPI must trust this GitHub workflow before releases can publish.
+
+Configure the PyPI project with:
+
+- owner: `chags1313`
+- repository: `monomech`
+- workflow filename: `publish.yml`
+- environment: blank, unless the workflow is changed to use an environment
+
+If PyPI reports `invalid-pending-publisher` for an existing project, configure the Trusted Publisher on the existing PyPI project rather than creating a pending publisher for a new project.
+
+## Release Command
+
+After `main` is ready:
 
 ```bash
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.15.1
+git push origin v0.15.1
 ```
 
-That tag should trigger the PyPI publish job.
+GitHub Actions will build distributions from that tag and upload them to PyPI.
 
-## 7. If publishing fails
+## Verify
 
-Check, in order:
+```bash
+python -m venv .venv-smoke
+.venv-smoke\Scripts\python -m pip install --upgrade pip
+.venv-smoke\Scripts\python -m pip install monomech
+.venv-smoke\Scripts\python -c "import monomech as mm; print(mm.list_builtin_osim_models())"
+```
 
-1. the GitHub Actions logs
-2. the version number in `pyproject.toml`
-3. that the package name matches the publisher configuration
-4. that the repository owner, repo name, and workflow filename match exactly
-5. that the PyPI project is not already using a different publisher
+On macOS/Linux, activate the environment with `source .venv-smoke/bin/activate` or call `.venv-smoke/bin/python`.
 
+## Common Failures
 
-## Docs site deployment is separate from PyPI publishing
-
-The repository includes two independent GitHub Actions flows:
-
-- `.github/workflows/docs.yml` publishes the documentation site to GitHub Pages
-- `.github/workflows/publish.yml` publishes package distributions to TestPyPI or PyPI
-
-That separation is intentional. It keeps documentation failures from blocking local development, and it keeps release publishing explicit and auditable.
+| Failure | Meaning | Fix |
+| --- | --- | --- |
+| `invalid-pending-publisher` | PyPI project does not trust this workflow | Add or update the Trusted Publisher on PyPI |
+| file already exists | version was already uploaded | bump `pyproject.toml` and tag a new version |
+| metadata validation failed | package metadata is invalid | run `python -m build` locally and inspect output |
+| build succeeds but publish does not run | push was not a `v*` tag | create and push a version tag |

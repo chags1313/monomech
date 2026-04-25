@@ -1,62 +1,71 @@
 # monomech
 
-`monomech` is a notebook-first monocular biomechanics library built around **explicit, inspectable stages** rather than a black-box pipeline.
+`monomech` is a notebook-first biomechanics library for turning single-camera video and marker data into inspectable tables, OpenSim-ready files, and reproducible analysis artifacts.
 
-It is designed for workflows where you want to:
+It is designed for researchers and developers who want a clear path through the workflow without losing access to the intermediate data.
 
-- start from one video or many videos
-- inspect **2D pose** in image space
-- inspect **MediaPipe world landmarks** as root-centered **world3d**
-- solve **PnP** from `pose2d + world3d`
-- estimate **global pose** from `pose2d + world3d + pnp`
-- define **semantic external forces** on body segments or exact OpenSim bodies
-- export both **native biomechanics files** and easy-to-read **CSV tables**
-- use **OpenSim** for scaling, inverse kinematics, and inverse dynamics
-
-## Core ideas
-
-### Modular stages
-Each stage is a first-class API boundary. You can run one stage, inspect it, save it, compare it, and continue later.
-
-### Notebook-first outputs
-Every major stage returns result objects with DataFrames, artifacts, metadata, and visualization handles.
-
-### Full-pipeline convenience
-When you do want a single orchestrated run, `FullPipeline` wraps the same modular stages instead of hiding them.
-
-## Stage map
-
-- `pose2d` — image-space MediaPipe landmarks
-- `world3d` — direct MediaPipe world landmarks, treated as root-centered 3D
-- `pnp` — camera/root reconstruction from `pose2d + world3d`
-- `global_pose` — floor-aligned global coordinates from `pose2d + world3d + pnp`
-- `forces` — semantic or exact-body external loads
-- `opensim.run_ik` — scale + IK helpers and exports
-- `opensim.run_id` — external loads + inverse dynamics helpers and exports
-- `FullPipeline` — wrapper around the same stage objects
-
-## Quick example
+## Core Workflow
 
 ```python
 import monomech as mm
 
-trial = mm.Trial.from_video("subject01.mp4")
+trial = mm.load_video("subject01.mp4")
 
-pose2d = mm.pose2d.process(trial)
-world3d = mm.world3d.process(trial, pose2d=pose2d)
-pnp = mm.pnp.solve(trial, pose2d=pose2d, world3d=world3d)
-global_pose = mm.global_pose.estimate(
-    trial,
-    pose2d=pose2d,
-    world3d=world3d,
-    pnp=pnp,
-)
+pose2d = trial.estimate_pose2d()
+pose3d_world = trial.estimate_pose3d_world()
+pose3d_global = trial.estimate_pose3d_global()
+
+pose3d_global.to_csv("outputs/subject01_global.csv")
+pose3d_global.to_trc("outputs/subject01_global.trc", model_path="model.osim")
 ```
 
-## Where to go next
+## What monomech Gives You
+
+- video-first and marker-first trial objects
+- explicit pose, smoothing, gap-filling, TRC, and OpenSim steps
+- result objects that convert cleanly to DataFrames and files
+- packaged OpenSim and pose model resources
+- optional native dependencies so base installs remain importable
+
+## Installation
+
+Base install:
+
+```bash
+python -m pip install monomech
+```
+
+Video pose support:
+
+```bash
+python -m pip install "monomech[pose]"
+```
+
+OpenSim-compatible PyPI bindings:
+
+```bash
+python -m pip install "monomech[opensim]"
+```
+
+All optional runtime dependencies:
+
+```bash
+python -m pip install "monomech[all]"
+```
+
+## Workflows
+
+| Workflow | Entry point | Main outputs |
+| --- | --- | --- |
+| Video to pose | `mm.load_video()` | 2D pose, world 3D pose, global 3D pose |
+| Marker cleanup | `mm.load_trc()` | cleaned marker tables, TRC |
+| OpenSim scale/IK/ID | trial OpenSim methods | setup XML, scaled model, MOT/STO files |
+| Packaged resources | `mm.get_builtin_osim_model()` | stable local model paths |
+
+## Next Steps
 
 - [Getting started](getting-started.md)
-- [Examples](examples.md)
-- [Modular stages overview](stages/index.md)
-- [Outputs and files](outputs.md)
-- [GATMA model guide](gatma-model.md)
+- [Video workflow](stages/pose2d.md)
+- [Marker and TRC outputs](outputs.md)
+- [OpenSim guide](stages/opensim.md)
+- [FAQ](FAQ.md)

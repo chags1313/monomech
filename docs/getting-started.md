@@ -1,99 +1,109 @@
-# Getting started
+# Getting Started
 
-## 1. Install the package
+This guide walks through the shortest path from installation to a useful exported result.
 
-From PyPI:
+## Install
+
+Base install:
 
 ```bash
 python -m pip install monomech
 ```
 
-For local development from the repository:
+For video pose estimation, install the pose extra:
 
 ```bash
-python -m pip install -e .
+python -m pip install "monomech[pose]"
+```
+
+For OpenSim-compatible PyPI bindings:
+
+```bash
+python -m pip install "monomech[opensim]"
+```
+
+For development:
+
+```bash
 python -m pip install -e ".[dev]"
 ```
 
-## 2. Open a notebook or Python session
-
-`monomech` is designed to feel natural in Jupyter notebooks.
+## Import
 
 ```python
 import monomech as mm
 ```
 
-## 3. Create a trial from a video
+## Video-First Workflow
 
 ```python
-trial = mm.Trial.from_video("subject01.mp4")
+trial = mm.load_video("subject01.mp4")
+
+pose2d = trial.estimate_pose2d()
+pose3d_world = trial.estimate_pose3d_world()
+pose3d_global = trial.estimate_pose3d_global()
 ```
 
-## 4. Run individual stages
+Export analysis-friendly and OpenSim-friendly files:
 
 ```python
-pose2d = mm.pose2d.process(trial)
-world3d = mm.world3d.process(trial, pose2d=pose2d)
-pnp = mm.pnp.solve(trial, pose2d=pose2d, world3d=world3d)
-global_pose = mm.global_pose.estimate(trial, pose2d=pose2d, world3d=world3d, pnp=pnp)
+pose3d_global.to_csv("outputs/subject01_global.csv")
+pose3d_global.to_trc("outputs/subject01_global.trc", model_path="model.osim")
 ```
 
-## 5. Inspect outputs as tables
+Run the bundled convenience pipeline when you want the common steps together:
 
 ```python
-pose2d.df.head()
-pose2d.tables["landmarks_long"].head()
-world3d.tables["world3d_long"].head()
-pnp.tables["camera_pose"].head()
-global_pose.tables["contacts"].head()
-```
-
-## 6. Use the full wrapper when desired
-
-```python
-pipeline = mm.FullPipeline(
-    stages=mm.PipelineStages(
-        pose2d=True,
-        world3d=True,
-        pnp=True,
-        global_pose=True,
-        forces=False,
-        ik=False,
-        id=False,
-    )
-)
-
-run = pipeline.run("subject01.mp4", output_dir="outputs/subject01")
-```
-
-## 7. Move into OpenSim
-
-```python
-ik = mm.opensim.run_ik(
-    trial,
-    global_pose=global_pose,
-    model_path="GATMA_Model.osim",
+run = trial.run_pipeline(
+    export_csv=True,
+    export_trc=True,
+    model_path="model.osim",
+    output_dir="outputs/subject01",
 )
 ```
 
-## 8. Add external forces and inverse dynamics
+## Marker-First Workflow
 
 ```python
-force_set = mm.ForceSet([
-    mm.ExternalForce.constant(
-        name="right_grf",
-        target="right_foot",
-        magnitude=900.0,
-        direction=(0.0, 1.0, 0.0),
-        point="right_ankle",
-    )
-])
+trial = mm.load_trc("walk.trc")
 
-forces = mm.forces.build(trial, global_pose=global_pose, force_set=force_set)
-id_result = mm.opensim.run_id(
-    trial,
-    ik=ik,
-    forces=forces,
-    model_path="GATMA_Model.osim",
+trial.clean_markers(
+    gap_fill_method="rigid_cluster",
+    gap_fill_max_frames=20,
+    cutoff_hz=6.0,
+)
+
+trial.to_trc("outputs/walk_clean.trc")
+```
+
+## OpenSim
+
+```python
+scale = trial.run_opensim_scale(
+    model_path="model.osim",
+    trc_path="outputs/subject01_global.trc",
+)
+
+ik = trial.run_opensim_ik(
+    model_path=scale.scaled_model_path,
+    trc_path="outputs/subject01_global.trc",
 )
 ```
+
+If OpenSim is installed through conda, `monomech` will try to use the official `opensim` Python package. If you use the PyPI binding, install `monomech[opensim]`.
+
+## Built-In Models
+
+```python
+model_path = mm.get_builtin_osim_model("pose")
+models = mm.list_builtin_osim_models()
+```
+
+Built-in model names currently include:
+
+- `pose`
+- `mocap`
+
+## Troubleshooting
+
+If `import monomech` fails after a base install, reinstall from version `0.15.1` or newer. Native video/OpenSim dependencies are optional extras and should not be required for a base import.

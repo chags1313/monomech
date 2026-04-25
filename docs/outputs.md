@@ -1,82 +1,93 @@
-# Outputs and files
+# Outputs and Files
 
-Each stage returns a result object with a consistent shape:
+`monomech` result objects are designed to be inspectable in notebooks and useful in downstream tools.
 
-- `df` — primary DataFrame
-- `tables` — named DataFrames
-- `artifacts` — files written to disk
-- `meta` — metadata and processing settings
-- `figures` — notebook-ready figures when available
+## Common Result Methods
 
-## Standard file philosophy
+Most pose and marker results provide:
 
-Whenever possible, `monomech` writes both:
+- `to_dataframe()` for long-form analysis tables
+- `to_wide_df()` for wide-form tables
+- `to_csv(path)` for CSV export
+- `to_trc(path, model_path=...)` where marker/TRC export is supported
+- `summary()` for quick quality checks
+- `.smooth(...)` and `.gap_fill(...)` on compatible results
 
-- a **biomechanics-native file** for downstream tooling
-- a **CSV copy** for direct inspection and analysis
+## Video Pipeline Outputs
 
-## Typical outputs by stage
+```python
+trial = mm.load_video("subject01.mp4")
+run = trial.run_pipeline(
+    export_csv=True,
+    export_trc=True,
+    model_path="model.osim",
+    output_dir="outputs/subject01",
+)
+```
 
-## `pose2d`
-- `pose2d.csv`
-- `pose2d.parquet`
+Typical files:
 
-## `world3d`
-- `world3d.csv`
-- `world3d.parquet`
+```text
+outputs/subject01/
+  subject01_pose2d.csv
+  subject01_pose3d_world.csv
+  subject01_pose3d_global.csv
+  subject01.trc
+```
 
-## `pnp`
-- `pnp_camera_pose.csv`
-- `pnp_reprojection.csv`
+## Marker Pipeline Outputs
 
-## `global_pose`
-- `global_pose.csv`
-- `global_pose.parquet`
-- `global_pose.trc`
+```python
+trial = mm.load_trc("walk.trc")
+trial.clean_markers()
+trial.to_trc("outputs/walk_clean.trc")
+```
 
-## `forces`
-- `external_loads.csv`
-- `external_loads.sto`
-- `ExternalLoads.xml`
+Typical files:
 
-## `opensim.run_ik`
-- `global_markers.trc`
-- `global_markers.csv`
-- `Setup_Scale.xml`
-- `scale_measurements.csv`
-- `scaled.osim`
-- `Setup_IK.xml`
-- `ik.mot`
-- `ik.csv`
+```text
+outputs/
+  walk_clean.trc
+```
 
-## `opensim.run_id`
-- `external_loads.sto`
-- `external_loads.csv`
-- `ExternalLoads.xml`
-- `id.sto`
-- `id.csv`
+## OpenSim Outputs
 
-## Recommended folder layout
+Scale, IK, and ID methods write OpenSim setup files and result files into stage-specific directories by default:
 
 ```text
 outputs/
   subject01/
-    pose2d.csv
-    world3d.csv
-    pnp_camera_pose.csv
-    global_pose.csv
-    global_pose.trc
-    global_markers.trc
-    global_markers.csv
-    Setup_Scale.xml
-    scale_measurements.csv
-    scaled.osim
-    Setup_IK.xml
-    ik.mot
-    ik.csv
-    external_loads.sto
-    external_loads.csv
-    ExternalLoads.xml
-    id.sto
-    id.csv
+    scale/
+      *_scale_setup.xml
+      *_scaled.osim
+    ik/
+      *_ik_setup.xml
+      *_ik.mot
+      _ik_marker_errors.sto
+    id/
+      *_id_setup.xml
+      *_id.sto
+      *_ExternalLoads.xml
 ```
+
+Exact names depend on the source trial and OpenSim stage configuration.
+
+## Recommended Layout
+
+Use one output directory per subject or trial:
+
+```text
+outputs/
+  subject01_walk/
+    pose/
+    scale/
+    ik/
+    id/
+  subject02_walk/
+    pose/
+    scale/
+    ik/
+    id/
+```
+
+This keeps intermediate pose data, exported TRC files, and OpenSim results together without mixing subjects.

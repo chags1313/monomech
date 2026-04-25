@@ -1,15 +1,15 @@
-# GitHub Pages documentation site
+# GitHub Pages Documentation Site
 
-This repository is configured to publish a documentation website with **MkDocs** and a **GitHub Actions Pages workflow**.
+This repository publishes its documentation with MkDocs and GitHub Pages.
 
-## Files involved
+## Files Involved
 
-- `mkdocs.yml` — site configuration and navigation
-- `docs/requirements.txt` — docs-site Python dependencies
-- `.github/workflows/docs.yml` — build and deploy workflow
-- `docs/` — Markdown source for the site
+- `mkdocs.yml` - site configuration and navigation
+- `docs/requirements.txt` - documentation build dependencies
+- `.github/workflows/docs.yml` - build and deploy workflow
+- `docs/` - Markdown source files
 
-## Local preview
+## Local Preview
 
 ```bash
 python -m pip install -r docs/requirements.txt
@@ -18,21 +18,33 @@ mkdocs serve
 
 Then open `http://127.0.0.1:8000/`.
 
-## Production publish flow
+## Strict Build
 
-1. Push the repository to GitHub.
-2. In **Settings → Pages**, set **Source** to **GitHub Actions**.
+The GitHub workflow uses strict mode. Run the same check locally:
+
+```bash
+mkdocs build --strict
+```
+
+Strict mode fails on broken links, missing navigation targets, and other documentation warnings.
+
+## Production Publish Flow
+
+1. In GitHub, go to **Settings > Pages**.
+2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
 3. Push to `main`.
-4. GitHub Actions builds the site and deploys it to Pages.
+4. The Docs workflow builds and deploys the site.
 
-## Expected docs URL
+## Site URL
 
-For a repository named `monomech` under your personal account, the site URL is typically:
+The configured site URL is:
 
-- `https://your-github-username.github.io/monomech/`
+```text
+https://chags1313.github.io/monomech/
+```
 
 ## Notes
 
-- The workflow builds docs on pull requests for validation.
-- It only deploys on non-PR events.
-- Update the placeholder GitHub username in `mkdocs.yml` and `pyproject.toml` before publishing.
+- Pull requests build the docs for validation.
+- Pushes to `main` build and deploy the site.
+- Keep `mkdocs.yml` navigation in sync whenever files are added, moved, or removed.

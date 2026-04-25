@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "monomech"
-version = "0.14.0"
+version = "0.15.1"
 description = "Single camera biomechanics library"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.10,<3.13"
 authors = [
   { name = "Cole Hagen" }
@@ -17,7 +17,6 @@ classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
   "Intended Audience :: Healthcare Industry",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.10",
@@ -32,12 +31,21 @@ dependencies = [
   "packaging>=24,<26",
   "scipy>=1.13,<1.15",
   "matplotlib>=3.8,<4",
+]
+
+[project.optional-dependencies]
+pose = [
+  "mediapipe>=0.10.31,<0.11",
+  "opencv-python-headless>=4.8,<5",
+]
+opensim = [
+  "pyopensim>=4.5.2.0,<5",
+]
+all = [
   "mediapipe>=0.10.31,<0.11",
   "opencv-python-headless>=4.8,<5",
   "pyopensim>=4.5.2.0,<5",
 ]
-
-[project.optional-dependencies]
 notebook = [
   "jupyter>=1,<2",
   "ipykernel>=6,<7",

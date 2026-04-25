@@ -361,25 +361,68 @@ def run_ik(
 ) -> StorageResult:
     osim = require_opensim()
     config = config or OpenSimIKConfig()
-    trc_path = Path(trc_path)
-    model_path = Path(model_path)
-    output_dir = ensure_dir(output_dir)
+
+    trc_path = Path(trc_path).resolve()
+    model_path = Path(model_path).resolve()
+    output_dir = ensure_dir(Path(output_dir).resolve())
+
+    if not trc_path.exists():
+        raise FileNotFoundError(f"TRC file not found: {trc_path}")
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model file not found: {model_path}")
+
     prefix = config.output_prefix or trc_path.stem
     mot_path = output_dir / f"{prefix}_ik.mot"
     setup_xml_path = output_dir / f"{prefix}_ik_setup.xml"
 
+    # Read TRC so IK uses the full marker time range
+    trc_trial = load_trc(trc_path)
+    time = trc_trial.markers.time
+    if time is None or len(time) < 2:
+        raise ValueError(f"TRC file must contain at least 2 valid time samples: {trc_path}")
+
+    start_time = float(time[0])
+    end_time = float(time[-1])
+
     ik = osim.InverseKinematicsTool()
-    try:
+
+    # Model file
+    if hasattr(ik, "setModelFileName"):
         ik.setModelFileName(str(model_path))
-    except Exception:
+    elif hasattr(ik, "set_model_file"):
         ik.set_model_file(str(model_path))
-    ik.setMarkerDataFileName(str(trc_path))
-    ik.setOutputMotionFileName(str(mot_path))
-    ik.setResultsDir(str(output_dir))
+    else:
+        raise AttributeError("Could not find a compatible model-file setter on InverseKinematicsTool.")
+
+    # Marker data
+    if hasattr(ik, "setMarkerDataFileName"):
+        ik.setMarkerDataFileName(str(trc_path))
+    elif hasattr(ik, "set_marker_data_file_name"):
+        ik.set_marker_data_file_name(str(trc_path))
+    else:
+        raise AttributeError("Could not find a compatible marker-data setter on InverseKinematicsTool.")
+
+    # Output motion
+    if hasattr(ik, "setOutputMotionFileName"):
+        ik.setOutputMotionFileName(str(mot_path))
+    elif hasattr(ik, "set_output_motion_file_name"):
+        ik.set_output_motion_file_name(str(mot_path))
+    else:
+        raise AttributeError("Could not find a compatible output-motion setter on InverseKinematicsTool.")
+
+    # Results dir
+    if hasattr(ik, "setResultsDir"):
+        ik.setResultsDir(str(output_dir))
+    elif hasattr(ik, "set_results_dir"):
+        ik.set_results_dir(str(output_dir))
+
+    # Marker weights
     for marker, weight in config.marker_weights.items():
         task = osim.IKMarkerTask(marker)
         task.setWeight(float(weight))
         ik.getIKTaskSet().cloneAndAppend(task)
+
+    # Accuracy
     if hasattr(ik, "set_accuracy"):
         ik.set_accuracy(float(config.accuracy))
     elif hasattr(ik, "setAccuracy"):
@@ -388,9 +431,32 @@ def run_ik(
         raise AttributeError(
             "InverseKinematicsTool has neither set_accuracy nor setAccuracy in this OpenSim build."
         )
+
+    # IMPORTANT: explicitly set full TRC time range
+    if hasattr(ik, "setStartTime"):
+        ik.setStartTime(start_time)
+        ik.setEndTime(end_time)
+    elif hasattr(ik, "set_start_time"):
+        ik.set_start_time(start_time)
+        ik.set_end_time(end_time)
+    else:
+        raise AttributeError(
+            "InverseKinematicsTool has neither setStartTime/setEndTime "
+            "nor set_start_time/set_end_time in this OpenSim build."
+        )
+
     ik.printToXML(str(setup_xml_path))
     ik.run()
-    return StorageResult(path=mot_path, dataframe=read_storage(mot_path), metadata={"setup_xml_path": str(setup_xml_path)})
+
+    return StorageResult(
+        path=mot_path,
+        dataframe=read_storage(mot_path),
+        metadata={
+            "setup_xml_path": str(setup_xml_path),
+            "trc_path": str(trc_path),
+            "time_range": [start_time, end_time],
+        },
+    )
 
 
 def run_id(

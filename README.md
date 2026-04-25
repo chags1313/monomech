@@ -56,6 +56,24 @@ After you put the repository on GitHub and enable Pages with the included workfl
 python -m pip install monomech
 ```
 
+For MediaPipe-based pose estimation:
+
+```bash
+python -m pip install "monomech[pose]"
+```
+
+For PyPI OpenSim-compatible bindings:
+
+```bash
+python -m pip install "monomech[opensim]"
+```
+
+For the full optional runtime stack:
+
+```bash
+python -m pip install "monomech[all]"
+```
+
 ### For local development
 
 ```bash

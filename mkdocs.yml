@@ -4,10 +4,12 @@ site_url: https://chags1313.github.io/monomech/
 repo_url: https://github.com/chags1313/monomech
 repo_name: chags1313/monomech
 edit_uri: edit/main/docs/
-copyright: Copyright © 2026 monomech contributors
+copyright: Copyright (c) 2026 monomech contributors
 
 theme:
   name: material
+  icon:
+    logo: material/chart-timeline-variant
   features:
     - navigation.instant
     - navigation.sections
@@ -45,11 +47,17 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.tabbed:
       alternate_style: true
 
 plugins:
   - search
+
+extra_css:
+  - assets/stylesheets/extra.css
 
 nav:
   - Home: index.md

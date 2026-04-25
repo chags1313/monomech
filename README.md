@@ -1,16 +1,23 @@
 # monomech
 
+[![CI](https://github.com/chags1313/monomech/actions/workflows/ci.yml/badge.svg)](https://github.com/chags1313/monomech/actions/workflows/ci.yml)
+[![Docs](https://github.com/chags1313/monomech/actions/workflows/docs.yml/badge.svg)](https://github.com/chags1313/monomech/actions/workflows/docs.yml)
+[![Pages](https://github.com/chags1313/monomech/actions/workflows/pages.yml/badge.svg)](https://github.com/chags1313/monomech/actions/workflows/pages.yml)
+
 `monomech` is a notebook-first Python library for single-camera biomechanics workflows. It helps you move from video or marker data into inspectable pose results, OpenSim-ready files, and analysis-friendly tables without hiding the intermediate steps.
 
-The library is built around a practical workflow:
+Read the full documentation at [chags1313.github.io/monomech](https://chags1313.github.io/monomech/).
 
-1. Load a video or TRC marker trial.
-2. Estimate 2D pose and MediaPipe world landmarks when working from video.
-3. Convert pose results into a global marker representation.
-4. Export CSV and TRC files for inspection and downstream tools.
-5. Run OpenSim scale, inverse kinematics, and inverse dynamics when OpenSim bindings are available.
+## What It Does
 
-## Installation
+- Loads single-camera videos and TRC marker files.
+- Estimates 2D pose, MediaPipe world landmarks, and global 3D pose.
+- Exports wide/long CSV files and OpenSim-friendly TRC files.
+- Cleans marker data with gap filling and smoothing.
+- Provides helpers for OpenSim scale, inverse kinematics, and inverse dynamics.
+- Ships bundled model resources so examples and tests have stable local paths.
+
+## Install
 
 Base install:
 
@@ -30,101 +37,97 @@ PyPI OpenSim-compatible bindings:
 python -m pip install "monomech[opensim]"
 ```
 
+Notebooks and plotting:
+
+```bash
+python -m pip install "monomech[notebook]"
+```
+
 Everything optional:
 
 ```bash
 python -m pip install "monomech[all]"
 ```
 
-For local development:
-
-```bash
-python -m pip install -e ".[dev]"
-```
-
 `monomech` currently supports Python 3.10 through 3.12.
 
-## Quick Start
+## Five-Minute Workflow
 
 ```python
+from pathlib import Path
 import monomech as mm
 
-trial = mm.load_video("subject01.mp4")
+video_path = Path("data/subject01.mp4")
+output_dir = Path("outputs/subject01")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+trial = mm.load_video(video_path)
 
 pose2d = trial.estimate_pose2d()
 pose3d_world = trial.estimate_pose3d_world()
 pose3d_global = trial.estimate_pose3d_global()
 
-pose3d_global.to_csv("outputs/subject01_global.csv")
-pose3d_global.to_trc("outputs/subject01_global.trc", model_path="model.osim")
+pose3d_global.to_csv(output_dir / "subject01_global.csv")
+pose3d_global.to_trc(output_dir / "subject01_global.trc")
 ```
 
 For marker-first work:
 
 ```python
+from pathlib import Path
 import monomech as mm
 
-trial = mm.load_trc("walk.trc")
+trial = mm.load_trc("data/walk.trc")
+print(trial.summary())
+
 trial.clean_markers(cutoff_hz=6.0)
-trial.to_trc("outputs/walk_clean.trc")
+trial.to_trc(Path("outputs/walk/walk_clean.trc"))
 ```
 
-For bundled OpenSim model resources:
+## Example Notebooks
+
+The `examples/` folder includes ready-to-edit notebooks:
+
+- [`video_to_trc_quickstart.ipynb`](examples/video_to_trc_quickstart.ipynb) for video to pose to CSV/TRC.
+- [`marker_trc_cleanup.ipynb`](examples/marker_trc_cleanup.ipynb) for TRC inspection, cleaning, and export.
+- [`opensim_scale_ik_template.ipynb`](examples/opensim_scale_ik_template.ipynb) for OpenSim scale and inverse kinematics setup.
+
+Each notebook keeps paths at the top and separates inspection, export, and downstream steps.
+
+## Documentation Map
+
+- [Getting started](https://chags1313.github.io/monomech/getting-started/)
+- [Example notebooks](https://chags1313.github.io/monomech/examples/)
+- [Outputs and files](https://chags1313.github.io/monomech/outputs/)
+- [OpenSim stage guide](https://chags1313.github.io/monomech/stages/opensim/)
+- [Publishing guide](https://chags1313.github.io/monomech/PUBLISHING/)
+
+## OpenSim Workflow
 
 ```python
 import monomech as mm
 
 model_path = mm.get_builtin_osim_model("pose")
-print(model_path)
-```
 
-## OpenSim Workflow
-
-OpenSim operations are available through trial methods:
-
-```python
 scale = trial.run_opensim_scale(
-    model_path="model.osim",
-    trc_path="outputs/subject01_global.trc",
+    model_path=model_path,
+    trc_path="outputs/subject01/subject01_global.trc",
 )
 
 ik = trial.run_opensim_ik(
     model_path=scale.scaled_model_path,
-    trc_path="outputs/subject01_global.trc",
-)
-
-id_result = trial.run_opensim_id(
-    model_path=scale.scaled_model_path,
-    ik_path=ik.mot_path,
+    trc_path="outputs/subject01/subject01_global.trc",
 )
 ```
 
 OpenSim itself can be installed through conda, or you can opt into the PyPI-compatible `pyopensim` binding with `monomech[opensim]`.
 
-## What Ships
-
-- `VideoTrial` and `MarkerTrial` objects for video-first and marker-first workflows
-- pose estimation helpers for 2D, world 3D, and global 3D pose
-- TRC loading/export
-- OpenSim setup and execution helpers
-- packaged OpenSim models and pose model resources
-- notebook-friendly result objects with DataFrame and file export helpers
-
-## Documentation
-
-- [Getting started](docs/getting-started.md)
-- [Outputs and files](docs/outputs.md)
-- [OpenSim stage guide](docs/stages/opensim.md)
-- [Publishing guide](docs/PUBLISHING.md)
-- [Release guide](docs/RELEASING.md)
-
-The documentation site is built with MkDocs and published through GitHub Pages.
-
 ## Development
 
 ```bash
 python -m pip install -e ".[dev]"
-pytest
+python -m pytest tests
+mkdocs build --strict
 python -m build
 ```
 

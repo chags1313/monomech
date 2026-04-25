@@ -1,43 +1,81 @@
 # Examples
 
-Examples should show the same public API documented elsewhere: `mm.load_video()`, `mm.load_trc()`, trial methods, result exports, and optional OpenSim stages.
+The example notebooks are designed to be read top to bottom. Each notebook keeps input paths near the top, exports into a dedicated output folder, and pauses after important stages so you can inspect the data before continuing.
+
+## Notebooks
+
+| Notebook | Use it when | Main outputs |
+| --- | --- | --- |
+| [`video_to_trc_quickstart.ipynb`](https://github.com/chags1313/monomech/blob/main/examples/video_to_trc_quickstart.ipynb) | You have a single-camera video and want CSV/TRC exports. | pose CSV files, global TRC |
+| [`marker_trc_cleanup.ipynb`](https://github.com/chags1313/monomech/blob/main/examples/marker_trc_cleanup.ipynb) | You already have a TRC file and want a cleaned version. | marker summary, cleaned TRC |
+| [`opensim_scale_ik_template.ipynb`](https://github.com/chags1313/monomech/blob/main/examples/opensim_scale_ik_template.ipynb) | You have a TRC and want to set up OpenSim scale and IK. | scale setup, scaled model, IK motion |
+
+## Suggested Order
+
+<div class="mono-path" markdown>
+<div class="mono-step" markdown>
+**Run the import cell**
+
+Confirm the environment imports `monomech` before pointing at large data files.
+</div>
+<div class="mono-step" markdown>
+**Set paths once**
+
+Edit the `DATA_DIR`, input file, and `OUTPUT_DIR` variables near the top of each notebook.
+</div>
+<div class="mono-step" markdown>
+**Inspect before export**
+
+Use summaries and DataFrame previews before writing CSV or TRC files.
+</div>
+<div class="mono-step" markdown>
+**Move downstream slowly**
+
+Only run OpenSim after marker names, units, and time ranges look sensible.
+</div>
+</div>
 
 ## Minimal Video Example
 
 ```python
+from pathlib import Path
 import monomech as mm
 
-trial = mm.load_video("subject01.mp4")
+video_path = Path("data/subject01.mp4")
+output_dir = Path("outputs/subject01")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+trial = mm.load_video(video_path)
 
 pose2d = trial.estimate_pose2d()
 pose3d_world = trial.estimate_pose3d_world()
 pose3d_global = trial.estimate_pose3d_global()
 
-pose3d_global.to_csv("outputs/subject01_global.csv")
-pose3d_global.to_trc("outputs/subject01_global.trc", model_path="model.osim")
+pose3d_global.to_csv(output_dir / "subject01_global.csv")
+pose3d_global.to_trc(output_dir / "subject01_global.trc")
 ```
 
 ## Minimal Marker Example
 
 ```python
+from pathlib import Path
 import monomech as mm
 
-trial = mm.load_trc("walk.trc")
+trc_path = Path("data/walk.trc")
+output_dir = Path("outputs/walk")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+trial = mm.load_trc(trc_path)
+print(trial.summary())
+
 trial.clean_markers(cutoff_hz=6.0)
-trial.to_trc("outputs/walk_clean.trc")
+trial.to_trc(output_dir / "walk_clean.trc")
 ```
 
-## Suggested Notebook Progression
+## Good Notebook Hygiene
 
-1. Start with a single video and inspect each result as a DataFrame.
-2. Export CSV files and confirm the coordinate values make sense.
-3. Export TRC and inspect marker names against your OpenSim model.
-4. Run OpenSim scale and IK.
-5. Add external loads and inverse dynamics only after IK results look reasonable.
-
-## Good Example Hygiene
-
-- Keep raw data paths at the top of the notebook.
-- Keep one output directory per subject or trial.
-- Save intermediate CSV files while tuning parameters.
-- Record smoothing, gap-filling, and OpenSim config values in notebook text.
+- Keep raw input files in `data/` and generated files in `outputs/`.
+- Save intermediate CSV files while tuning pose, smoothing, or marker mapping.
+- Record the exact install command and package version in the first notebook cell.
+- Use one notebook per subject when parameter choices differ between trials.
+- Keep OpenSim scale, IK, and ID sections separate so failures are easier to debug.

@@ -91,6 +91,7 @@ The `examples/` folder includes ready-to-edit notebooks:
 - [`video_to_trc_quickstart.ipynb`](examples/video_to_trc_quickstart.ipynb) for video to pose to CSV/TRC.
 - [`marker_trc_cleanup.ipynb`](examples/marker_trc_cleanup.ipynb) for TRC inspection, cleaning, and export.
 - [`opensim_scale_ik_template.ipynb`](examples/opensim_scale_ik_template.ipynb) for OpenSim scale and inverse kinematics setup.
+- [`video_to_inverse_dynamics_pipeline.ipynb`](examples/video_to_inverse_dynamics_pipeline.ipynb) for video to inverse dynamics with estimated external loads.
 
 Each notebook keeps paths at the top and separates inspection, export, and downstream steps.
 
@@ -108,15 +109,28 @@ Each notebook keeps paths at the top and separates inspection, export, and downs
 import monomech as mm
 
 model_path = mm.get_builtin_osim_model("pose")
+trial = mm.load_video("data/subject01.mp4")
+run = trial.run_pipeline(export_csv=True, export_trc=True, output_dir="outputs/subject01")
 
 scale = trial.run_opensim_scale(
     model_path=model_path,
-    trc_path="outputs/subject01/subject01_global.trc",
+    trc_path=run.trc_path,
 )
 
 ik = trial.run_opensim_ik(
     model_path=scale.scaled_model_path,
-    trc_path="outputs/subject01/subject01_global.trc",
+    trc_path=run.trc_path,
+)
+
+estimated_loads = mm.external.estimate_grf(
+    pose3d=run.pose3d_global,
+    body_mass_kg=75.0,
+)
+
+id_result = trial.run_opensim_id(
+    model_path=scale.scaled_model_path,
+    ik_path=ik.path,
+    external_forces=estimated_loads,
 )
 ```
 

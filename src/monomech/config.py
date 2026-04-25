@@ -60,6 +60,7 @@ class OpenSimScaleConfig:
     time_window: tuple[float, float] | str = "auto"
     preserve_mass_distribution: bool = False
     output_prefix: str | None = None
+    sanitize_marker_data: bool = True
 
 
 @dataclass(slots=True)
@@ -67,9 +68,12 @@ class OpenSimIKConfig:
     marker_weights: dict[str, float] = field(default_factory=dict)
     accuracy: float = 1e-5
     output_prefix: str | None = None
+    sanitize_marker_data: bool = True
 
 
 @dataclass(slots=True)
 class OpenSimIDConfig:
     lowpass_cutoff_hz: float = -1.0
     output_prefix: str | None = None
+    time_window: tuple[float, float] | str = "auto"
+    sanitize_coordinates: bool = True

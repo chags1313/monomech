@@ -191,7 +191,7 @@ Run inverse dynamics only after inverse kinematics looks reasonable and you have
 ```python
 id_result = trial.run_opensim_id(
     model_path=scale.scaled_model_path,
-    ik_path=ik.mot_path,
+    ik_path=ik.path,
     output_dir="outputs/subject01/id",
 )
 ```

@@ -9,6 +9,7 @@ The example notebooks are designed to be read top to bottom. Each notebook keeps
 | [`video_to_trc_quickstart.ipynb`](https://github.com/chags1313/monomech/blob/main/examples/video_to_trc_quickstart.ipynb) | You have a single-camera video and want CSV/TRC exports. | pose CSV files, global TRC |
 | [`marker_trc_cleanup.ipynb`](https://github.com/chags1313/monomech/blob/main/examples/marker_trc_cleanup.ipynb) | You already have a TRC file and want a cleaned version. | marker summary, cleaned TRC |
 | [`opensim_scale_ik_template.ipynb`](https://github.com/chags1313/monomech/blob/main/examples/opensim_scale_ik_template.ipynb) | You have a TRC and want to set up OpenSim scale and IK. | scale setup, scaled model, IK motion |
+| [`video_to_inverse_dynamics_pipeline.ipynb`](https://github.com/chags1313/monomech/blob/main/examples/video_to_inverse_dynamics_pipeline.ipynb) | You want a full video -> TRC -> scale -> IK -> external loads -> ID walkthrough. | pose outputs, OpenSim files, estimated loads, ID storage |
 
 ## Suggested Order
 
@@ -34,6 +35,43 @@ Use summaries and DataFrame previews before writing CSV or TRC files.
 Only run OpenSim after marker names, units, and time ranges look sensible.
 </div>
 </div>
+
+## Full Video To ID Example
+
+```python
+import monomech as mm
+
+trial = mm.load_video("data/subject01.mp4")
+run = trial.run_pipeline(export_csv=True, export_trc=True, output_dir="outputs/subject01")
+
+model_path = mm.get_builtin_osim_model("pose")
+
+scale = trial.run_opensim_scale(
+    model_path=model_path,
+    trc_path=run.trc_path,
+    output_dir="outputs/subject01/scale",
+)
+
+ik = trial.run_opensim_ik(
+    model_path=scale.scaled_model_path,
+    trc_path=run.trc_path,
+    output_dir="outputs/subject01/ik",
+)
+
+estimated_loads = mm.external.estimate_grf(
+    pose3d=run.pose3d_global,
+    body_mass_kg=75.0,
+)
+
+id_result = trial.run_opensim_id(
+    model_path=scale.scaled_model_path,
+    ik_path=ik.path,
+    external_forces=estimated_loads,
+    output_dir="outputs/subject01/id",
+)
+
+print(id_result.path)
+```
 
 ## Minimal Video Example
 

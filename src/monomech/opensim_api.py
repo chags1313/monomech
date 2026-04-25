@@ -14,7 +14,187 @@ from .io.storage import read_storage
 from .opensim_runtime import require_opensim
 from .results import OpenSimScaleResult, StorageResult
 from .utils import ensure_dir
-from .io.trc import load_trc
+from .io.trc import load_trc, write_trc
+
+
+def _finite_interp(values: np.ndarray, time: np.ndarray) -> tuple[np.ndarray, dict]:
+    values = np.asarray(values, dtype=float)
+    time = np.asarray(time, dtype=float)
+    out = values.copy()
+    invalid = ~np.isfinite(out)
+    report = {
+        "nan_count": int(invalid.sum()),
+        "all_missing": bool(invalid.all()),
+        "filled": False,
+    }
+
+    if not invalid.any():
+        return out, report
+
+    valid = np.isfinite(out) & np.isfinite(time)
+    if valid.sum() >= 2:
+        out[invalid] = np.interp(time[invalid], time[valid], out[valid])
+    elif valid.sum() == 1:
+        out[invalid] = out[valid][0]
+    else:
+        out[:] = 0.0
+    report["filled"] = True
+    return out, report
+
+
+def _sanitize_marker_result_for_opensim(markers, *, output_dir: Path, prefix: str) -> tuple[Path | None, dict]:
+    data = np.asarray(markers.data, dtype=float).copy()
+    time = np.asarray(markers.time, dtype=float)
+    report = {
+        "input_nan_count": int((~np.isfinite(data)).sum()),
+        "input_time_nan_count": int((~np.isfinite(time)).sum()),
+        "all_missing_channels": [],
+        "filled_channels": [],
+    }
+
+    if report["input_nan_count"] == 0 and report["input_time_nan_count"] == 0:
+        return None, report
+
+    if report["input_time_nan_count"]:
+        if np.isfinite(time).sum() < 2:
+            raise ValueError("OpenSim marker data must contain at least 2 finite time samples.")
+        time, time_report = _finite_interp(time, np.arange(len(time), dtype=float))
+        report["time_fill"] = time_report
+
+    for marker_idx, marker_name in enumerate(markers.landmark_names):
+        for dim_idx, dim_name in enumerate(markers.dims):
+            filled, channel_report = _finite_interp(data[:, marker_idx, dim_idx], time)
+            if channel_report["nan_count"]:
+                label = f"{marker_name}_{dim_name}"
+                report["filled_channels"].append(
+                    {
+                        "channel": label,
+                        "nan_count": channel_report["nan_count"],
+                        "all_missing": channel_report["all_missing"],
+                    }
+                )
+                if channel_report["all_missing"]:
+                    report["all_missing_channels"].append(label)
+                data[:, marker_idx, dim_idx] = filled
+
+    clean_path = (output_dir / f"{prefix}_opensim_ready.trc").resolve()
+    write_trc(
+        clean_path,
+        time=time,
+        data=data,
+        marker_names=markers.landmark_names,
+        units=(markers.metadata or {}).get("units", "m"),
+        fps=markers.fps,
+    )
+    return clean_path, report
+
+
+def _prepare_trc_for_opensim(
+    trc_path: str | Path,
+    *,
+    output_dir: Path,
+    prefix: str,
+    sanitize: bool,
+) -> tuple[Path, dict]:
+    trc_path = Path(trc_path).resolve()
+    marker_trial = load_trc(trc_path)
+    markers = marker_trial.markers
+    if markers is None:
+        raise ValueError(f"TRC file did not contain marker data: {trc_path}")
+
+    if not sanitize:
+        nan_count = int((~np.isfinite(markers.data)).sum())
+        if nan_count:
+            raise ValueError(
+                f"TRC file contains {nan_count} non-finite marker values. "
+                "Pass a config with sanitize_marker_data=True or clean the TRC before OpenSim."
+            )
+        return trc_path, {"sanitized": False, "input_nan_count": 0}
+
+    clean_path, report = _sanitize_marker_result_for_opensim(markers, output_dir=output_dir, prefix=prefix)
+    report["sanitized"] = clean_path is not None
+    report["source_trc_path"] = str(trc_path)
+    if clean_path is None:
+        return trc_path, report
+    report["prepared_trc_path"] = str(clean_path)
+    return clean_path, report
+
+
+def _write_storage_from_dataframe(path: Path, df: pd.DataFrame, *, name: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = [
+        f"name {name}",
+        f"datacolumns {len(df.columns)}",
+        f"datarows {len(df)}",
+        f"range {float(df.iloc[0, 0]):.6f} {float(df.iloc[-1, 0]):.6f}",
+        "endheader",
+    ]
+    with path.open("w", encoding="utf-8", newline="\n") as f:
+        for line in header:
+            f.write(line + "\n")
+        f.write("\t".join(df.columns) + "\n")
+        df.to_csv(f, sep="\t", index=False, header=False, float_format="%.8f")
+    return path
+
+
+def _prepare_storage_for_opensim(
+    storage_path: str | Path,
+    *,
+    output_dir: Path,
+    prefix: str,
+    sanitize: bool,
+) -> tuple[Path, dict]:
+    storage_path = Path(storage_path).resolve()
+    df = read_storage(storage_path)
+    if df.empty:
+        raise ValueError(f"Storage file is empty: {storage_path}")
+
+    time_col = "time" if "time" in df.columns else df.columns[0]
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    nonfinite_counts = {col: int((~np.isfinite(df[col].to_numpy(dtype=float))).sum()) for col in df.columns}
+    total_nonfinite = sum(nonfinite_counts.values())
+
+    if total_nonfinite == 0:
+        return storage_path, {"sanitized": False, "input_nan_count": 0}
+    if not sanitize:
+        raise ValueError(
+            f"Storage file contains {total_nonfinite} non-finite values. "
+            "Pass a config with sanitize_coordinates=True or clean IK coordinates before ID."
+        )
+
+    time = df[time_col].to_numpy(dtype=float)
+    if np.isfinite(time).sum() < 2:
+        raise ValueError("OpenSim storage data must contain at least 2 finite time samples.")
+    if not np.isfinite(time).all():
+        time, _ = _finite_interp(time, np.arange(len(time), dtype=float))
+        df[time_col] = time
+
+    filled_columns = []
+    for col in df.columns:
+        if col == time_col:
+            continue
+        filled, report = _finite_interp(df[col].to_numpy(dtype=float), time)
+        if report["nan_count"]:
+            filled_columns.append(
+                {
+                    "column": col,
+                    "nan_count": report["nan_count"],
+                    "all_missing": report["all_missing"],
+                }
+            )
+            df[col] = filled
+
+    clean_path = (output_dir / f"{prefix}_coordinates_opensim_ready.mot").resolve()
+    _write_storage_from_dataframe(clean_path, df, name=f"{prefix}_coordinates_opensim_ready")
+    return clean_path, {
+        "sanitized": True,
+        "input_nan_count": int(total_nonfinite),
+        "source_storage_path": str(storage_path),
+        "prepared_storage_path": str(clean_path),
+        "filled_columns": filled_columns,
+    }
 
 
 def _write_external_loads_data(
@@ -89,6 +269,7 @@ def _write_external_loads_data(
 
     if merged is None or merged.empty:
         raise ValueError("No valid external loads were provided.")
+    merged = merged.replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
     mot_path = (out_dir / f"{prefix}_external_loads.mot").resolve()
     xml_path = (out_dir / f"{prefix}_ExternalLoads.xml").resolve()
@@ -305,6 +486,12 @@ def run_scale(
         raise FileNotFoundError(f"Model file not found: {model_path}")
 
     prefix = config.output_prefix or trc_path.stem
+    trc_path, preflight = _prepare_trc_for_opensim(
+        trc_path,
+        output_dir=output_dir,
+        prefix=prefix,
+        sanitize=bool(config.sanitize_marker_data),
+    )
     scaled_model_path = (output_dir / f"{prefix}_scaled.osim").resolve()
     setup_xml_path = (output_dir / f"{prefix}_scale_setup.xml").resolve()
 
@@ -348,6 +535,7 @@ def run_scale(
             "model_path": str(model_path),
             "time_range": [t0, t1],
             "output_dir": str(output_dir),
+            "preflight": preflight,
         },
     )
 
@@ -372,6 +560,12 @@ def run_ik(
         raise FileNotFoundError(f"Model file not found: {model_path}")
 
     prefix = config.output_prefix or trc_path.stem
+    trc_path, preflight = _prepare_trc_for_opensim(
+        trc_path,
+        output_dir=output_dir,
+        prefix=prefix,
+        sanitize=bool(config.sanitize_marker_data),
+    )
     mot_path = output_dir / f"{prefix}_ik.mot"
     setup_xml_path = output_dir / f"{prefix}_ik_setup.xml"
 
@@ -455,6 +649,7 @@ def run_ik(
             "setup_xml_path": str(setup_xml_path),
             "trc_path": str(trc_path),
             "time_range": [start_time, end_time],
+            "preflight": preflight,
         },
     )
 
@@ -480,6 +675,12 @@ def run_id(
         raise FileNotFoundError(f"Model file not found: {model_path}")
 
     prefix = config.output_prefix or ik_path.stem.replace("_ik", "")
+    ik_path, coordinate_preflight = _prepare_storage_for_opensim(
+        ik_path,
+        output_dir=output_dir,
+        prefix=prefix,
+        sanitize=bool(config.sanitize_coordinates),
+    )
     sto_name = f"{prefix}_id.sto"
     sto_path = (output_dir / sto_name).resolve()
     setup_xml_path = (output_dir / f"{prefix}_id_setup.xml").resolve()
@@ -577,6 +778,7 @@ def run_id(
             "external_loads_xml_path": None if external_xml is None else str(external_xml),
             "external_loads_mot_path": None if external_mot is None else str(external_mot),
             "run_return": ok,
+            "coordinate_preflight": coordinate_preflight,
         },
     )
 
@@ -637,7 +839,18 @@ def _resample_load_df_to_time(df: pd.DataFrame, time_vector: np.ndarray) -> pd.D
             continue
 
         src_y = pd.to_numeric(df[col], errors="coerce").to_numpy(dtype=float)[valid]
-        y = np.interp(time_vector, src_t, src_y, left=0.0, right=0.0)
+        finite_y = np.isfinite(src_y)
+        if finite_y.sum() >= 2:
+            interp_t = src_t[finite_y]
+            interp_y = src_y[finite_y]
+        elif finite_y.sum() == 1:
+            interp_t = np.array([src_t[0], src_t[-1]], dtype=float)
+            interp_y = np.array([src_y[finite_y][0], src_y[finite_y][0]], dtype=float)
+        else:
+            out[col] = 0.0
+            continue
+
+        y = np.interp(time_vector, interp_t, interp_y, left=0.0, right=0.0)
 
         # Make the behavior explicit: outside the provided load window, use zero.
         outside = (time_vector < active_start) | (time_vector > active_end)

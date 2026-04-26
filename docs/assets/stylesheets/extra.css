@@ -43,7 +43,7 @@
 
 .md-typeset .mono-hero h1 {
   margin: 0;
-  max-width: 12ch;
+  max-width: 16ch;
   font-size: clamp(2rem, 4vw, 3.2rem);
 }
 
@@ -137,4 +137,14 @@
 .md-header,
 .md-tabs {
   box-shadow: none;
+}
+
+.md-typeset table:not([class]) {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: 8px;
 }

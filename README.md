@@ -2,56 +2,40 @@
 
 [![CI](https://github.com/chags1313/monomech/actions/workflows/ci.yml/badge.svg)](https://github.com/chags1313/monomech/actions/workflows/ci.yml)
 [![Docs](https://github.com/chags1313/monomech/actions/workflows/docs.yml/badge.svg)](https://github.com/chags1313/monomech/actions/workflows/docs.yml)
-[![Pages](https://github.com/chags1313/monomech/actions/workflows/docs.yml/badge.svg)](https://github.com/chags1313/monomech/actions/workflows/docs.yml)
+[![PyPI](https://img.shields.io/pypi/v/monomech.svg)](https://pypi.org/project/monomech/)
+[![Python](https://img.shields.io/pypi/pyversions/monomech.svg)](https://pypi.org/project/monomech/)
 
-`monomech` is a notebook-first Python library for single-camera biomechanics workflows. It helps you move from video or marker data into inspectable pose results, OpenSim-ready files, and analysis-friendly tables without hiding the intermediate steps.
+`monomech` is a notebook-first Python library for single-camera biomechanics. It helps you move from video or marker data into inspectable pose results, OpenSim-ready TRC files, inverse kinematics, inverse dynamics, and analysis tables without hiding the intermediate steps.
 
-Read the full documentation at [chags1313.github.io/monomech](https://chags1313.github.io/monomech/).
+Full documentation: [chags1313.github.io/monomech](https://chags1313.github.io/monomech/)
 
-## What It Does
+## Why Use It
 
-- Loads single-camera videos and TRC marker files.
-- Estimates 2D pose, MediaPipe world landmarks, and global 3D pose.
-- Exports wide/long CSV files and OpenSim-friendly TRC files.
-- Cleans marker data with gap filling and smoothing.
-- Provides helpers for OpenSim scale, inverse kinematics, and inverse dynamics.
-- Ships bundled model resources so examples and tests have stable local paths.
+- Start from a normal video or an existing TRC file.
+- Export readable CSV and OpenSim-compatible TRC files.
+- Run pose estimation, marker cleanup, scaling, inverse kinematics, and inverse dynamics as separate inspectable steps.
+- Create OpenSim external loads from measured force data, arrays, carried loads, or estimated ground reaction forces.
+- Keep OpenSim preflight checks on by default so NaNs and isolated gaps are fixed before IK and ID runs.
+- Import the base package without installing heavy optional video or OpenSim dependencies.
 
 ## Install
-
-Base install:
 
 ```bash
 python -m pip install monomech
 ```
 
-Video pose estimation:
+Choose extras only when you need them:
 
-```bash
-python -m pip install "monomech[pose]"
-```
+| Workflow | Install command |
+| --- | --- |
+| Video pose estimation | `python -m pip install "monomech[pose]"` |
+| OpenSim Python bindings | `python -m pip install "monomech[opensim]"` |
+| Notebooks and plots | `python -m pip install "monomech[notebook]"` |
+| Everything optional | `python -m pip install "monomech[all]"` |
 
-PyPI OpenSim-compatible bindings:
+`monomech` supports Python 3.10 through 3.12.
 
-```bash
-python -m pip install "monomech[opensim]"
-```
-
-Notebooks and plotting:
-
-```bash
-python -m pip install "monomech[notebook]"
-```
-
-Everything optional:
-
-```bash
-python -m pip install "monomech[all]"
-```
-
-`monomech` currently supports Python 3.10 through 3.12.
-
-## Five-Minute Workflow
+## Quick Start: Video To TRC
 
 ```python
 from pathlib import Path
@@ -71,56 +55,39 @@ pose3d_global.to_csv(output_dir / "subject01_global.csv")
 pose3d_global.to_trc(output_dir / "subject01_global.trc")
 ```
 
-For marker-first work:
+Or run the common video export path in one call:
 
 ```python
-from pathlib import Path
-import monomech as mm
+run = trial.run_pipeline(
+    export_csv=True,
+    export_trc=True,
+    output_dir=output_dir,
+)
 
-trial = mm.load_trc("data/walk.trc")
-print(trial.summary())
-
-trial.clean_markers(cutoff_hz=6.0)
-trial.to_trc(Path("outputs/walk/walk_clean.trc"))
+print(run.csv_paths)
+print(run.trc_path)
 ```
 
-## Example Notebooks
-
-The `examples/` folder includes ready-to-edit notebooks:
-
-- [`video_to_trc_quickstart.ipynb`](examples/video_to_trc_quickstart.ipynb) for video to pose to CSV/TRC.
-- [`marker_trc_cleanup.ipynb`](examples/marker_trc_cleanup.ipynb) for TRC inspection, cleaning, and export.
-- [`opensim_scale_ik_template.ipynb`](examples/opensim_scale_ik_template.ipynb) for OpenSim scale and inverse kinematics setup.
-- [`video_to_inverse_dynamics_pipeline.ipynb`](examples/video_to_inverse_dynamics_pipeline.ipynb) for video to inverse dynamics with estimated external loads.
-- [`run_video_smoke.py`](examples/run_video_smoke.py) for repeatable command-line smoke tests.
-
-Each notebook keeps paths at the top and separates inspection, export, and downstream steps.
-
-## Documentation Map
-
-- [Getting started](https://chags1313.github.io/monomech/docs/getting-started.html)
-- [Example notebooks](https://chags1313.github.io/monomech/docs/examples.html)
-- [Outputs and files](https://chags1313.github.io/monomech/docs/outputs.html)
-- [OpenSim stage guide](https://chags1313.github.io/monomech/docs/stages/opensim.html)
-- [Publishing guide](https://chags1313.github.io/monomech/docs/PUBLISHING.html)
-
-## OpenSim Workflow
+## Full Pipeline: Video To Inverse Dynamics
 
 ```python
 import monomech as mm
 
-model_path = mm.get_builtin_osim_model("pose")
 trial = mm.load_video("data/subject01.mp4")
 run = trial.run_pipeline(export_csv=True, export_trc=True, output_dir="outputs/subject01")
+
+model_path = mm.get_builtin_osim_model("pose")
 
 scale = trial.run_opensim_scale(
     model_path=model_path,
     trc_path=run.trc_path,
+    output_dir="outputs/subject01/scale",
 )
 
 ik = trial.run_opensim_ik(
     model_path=scale.scaled_model_path,
     trc_path=run.trc_path,
+    output_dir="outputs/subject01/ik",
 )
 
 estimated_loads = mm.external.estimate_grf(
@@ -132,10 +99,59 @@ id_result = trial.run_opensim_id(
     model_path=scale.scaled_model_path,
     ik_path=ik.path,
     external_forces=estimated_loads,
+    output_dir="outputs/subject01/id",
+)
+
+print(id_result.path)
+print(id_result.metadata["external_loads_xml_path"])
+```
+
+For measured force plates, build an external-load spec from your force table:
+
+```python
+right_grf = mm.external.from_csv(
+    "data/right_force_plate.csv",
+    applied_to_body="calcn_r",
+    force_columns=("Fx", "Fy", "Fz"),
+    point_columns=("Px", "Py", "Pz"),
+    torque_columns=("Mx", "My", "Mz"),
+    time_column="time",
+    name="right_grf",
 )
 ```
 
-OpenSim itself can be installed through conda, or you can opt into the PyPI-compatible `pyopensim` binding with `monomech[opensim]`.
+## OpenSim Reliability Defaults
+
+OpenSim is strict about missing or non-finite values. The OpenSim helpers preflight inputs by default:
+
+- TRC marker gaps are interpolated before scale and IK.
+- IK coordinate NaNs are interpolated before inverse dynamics.
+- External-load data is resampled to IK time and non-finite force values are filled with zero.
+- Preflight reports and generated paths are stored in result metadata.
+
+```python
+print(ik.metadata["preflight"])
+print(id_result.metadata["coordinate_preflight"])
+```
+
+## Example Notebooks
+
+The `examples/` folder includes ready-to-edit notebooks:
+
+- [`video_to_trc_quickstart.ipynb`](examples/video_to_trc_quickstart.ipynb) for video to CSV/TRC.
+- [`marker_trc_cleanup.ipynb`](examples/marker_trc_cleanup.ipynb) for TRC inspection, gap filling, and smoothing.
+- [`opensim_scale_ik_template.ipynb`](examples/opensim_scale_ik_template.ipynb) for OpenSim scale and IK setup.
+- [`video_to_inverse_dynamics_pipeline.ipynb`](examples/video_to_inverse_dynamics_pipeline.ipynb) for video to IK/ID with external loads.
+- [`run_video_smoke.py`](examples/run_video_smoke.py) for repeatable command-line checks on a real video.
+
+## Documentation
+
+- [Getting started](https://chags1313.github.io/monomech/getting-started/)
+- [Example notebooks](https://chags1313.github.io/monomech/examples/)
+- [External loads and forces](https://chags1313.github.io/monomech/stages/forces/)
+- [OpenSim scale, IK, and ID](https://chags1313.github.io/monomech/stages/opensim/)
+- [Full video-to-ID pipeline](https://chags1313.github.io/monomech/stages/full-pipeline/)
+- [Outputs and files](https://chags1313.github.io/monomech/outputs/)
 
 ## Development
 
@@ -162,8 +178,6 @@ GitHub Actions builds distributions on every push to `main`. PyPI publishing is 
 git tag v0.15.1
 git push origin v0.15.1
 ```
-
-The PyPI project must have a matching Trusted Publisher configured for `chags1313/monomech` and `.github/workflows/publish.yml`.
 
 ## License
 

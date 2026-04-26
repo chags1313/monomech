@@ -12,13 +12,17 @@ theme:
     logo: material/chart-timeline-variant
   features:
     - navigation.instant
+    - navigation.tabs
     - navigation.sections
     - navigation.expand
+    - navigation.indexes
     - navigation.top
+    - navigation.footer
     - toc.follow
     - search.suggest
     - search.highlight
     - content.code.copy
+    - content.action.edit
   palette:
     - scheme: default
       primary: teal
@@ -43,7 +47,11 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
@@ -65,13 +73,13 @@ nav:
   - Examples: examples.md
   - Modular stages:
       - Overview: stages/index.md
-      - pose2d: stages/pose2d.md
-      - world3d: stages/world3d.md
-      - pnp: stages/pnp.md
-      - global_pose: stages/global-pose.md
-      - forces: stages/forces.md
-      - OpenSim: stages/opensim.md
-      - Full pipeline wrapper: stages/full-pipeline.md
+      - 2D pose: stages/pose2d.md
+      - World 3D pose: stages/world3d.md
+      - PnP calibration: stages/pnp.md
+      - Global pose: stages/global-pose.md
+      - External loads and forces: stages/forces.md
+      - OpenSim scale, IK, and ID: stages/opensim.md
+      - Full video-to-ID pipeline: stages/full-pipeline.md
   - Outputs and files: outputs.md
   - GATMA model guide: gatma-model.md
   - GitHub and releases:

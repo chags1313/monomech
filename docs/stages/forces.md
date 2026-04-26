@@ -1,23 +1,55 @@
 # External Loads And Forces
 
-External loads are the force inputs used by OpenSim inverse dynamics. In `monomech`, external loads are represented by `ExternalLoadsSpec` objects and are usually created through the `mm.external` factory.
+External loads are the force inputs OpenSim uses during inverse dynamics. In `monomech`, they are represented by `ExternalLoadsSpec` objects and are usually created through the `mm.external` factory.
 
-Use this page when you want to run inverse dynamics with ground reaction forces, a carried load, or another force time series.
+Use this page when you want inverse dynamics with force plates, pressure mats, estimated ground reaction forces, a carried object, or another force time series.
 
 ## What Inverse Dynamics Needs
 
-Inverse dynamics combines:
+Inverse dynamics combines four things:
 
-- a scaled OpenSim model
-- an IK coordinates file, usually `ik.path`
-- optional external forces, passed as `external_forces=...`
-- a valid time range shared by the IK coordinates and force data
+| Input | Purpose |
+| --- | --- |
+| Scaled model | The subject-specific OpenSim model. |
+| IK coordinates | The joint motion file, usually `ik.path`. |
+| External loads | Ground reaction forces or other applied forces. |
+| Shared time range | The IK and force data must overlap in time. |
 
-`monomech` writes the OpenSim external-load `.mot` and `ExternalLoads.xml` files for you when you pass an `ExternalLoadsSpec` into `run_opensim_id()`.
+When you pass `external_forces=...` to `run_opensim_id()`, `monomech` writes both files OpenSim expects:
+
+- `*_external_loads.mot`
+- `*_ExternalLoads.xml`
+
+Those paths are saved in `id_result.metadata`.
+
+## Choose A Load Source
+
+<div class="grid cards" markdown>
+
+-   **Measured force plate**
+
+    Use `from_dataframe()` or `from_csv()` when you have force, center-of-pressure, and optional torque columns.
+
+-   **Arrays from another tool**
+
+    Use `from_timeseries()` when your code already has NumPy arrays for time, force, point, and optional torque.
+
+-   **Carried object**
+
+    Use `carried_load()` for a simple constant downward load on a body.
+
+-   **No force plates**
+
+    Use `estimate_grf()` for demos, smoke tests, and rough exploratory workflows.
+
+</div>
+
+!!! warning "Measured forces are still the standard"
+    Estimated ground reaction forces can help test a full pipeline, but they are not a replacement for validated measured forces when interpreting kinetics.
 
 ## From A DataFrame
 
-Use this path when you already have force plate data, pressure mat data, or another measured force table.
+Use this when you already loaded force data with pandas.
 
 ```python
 import pandas as pd
@@ -38,7 +70,7 @@ right_grf = mm.external.from_dataframe(
 )
 ```
 
-The `name` becomes the OpenSim column prefix, so keep it short and unique.
+The `name` becomes the OpenSim column prefix. Keep it short and unique, especially when passing multiple loads.
 
 ## From A CSV
 
@@ -58,19 +90,20 @@ right_grf = mm.external.from_csv(
 
 ```python
 right_grf = mm.external.from_timeseries(
-    time=pose3d_global.time,
+    time=time_seconds,
     force=force_xyz,
     point=center_of_pressure_xyz,
+    torque=free_moment_xyz,
     applied_to_body="calcn_r",
     name="right_grf",
 )
 ```
 
-`force` and `point` must both have shape `(n_frames, 3)` and match the length of `time`.
+`force`, `point`, and `torque` use shape `(n_frames, 3)`. `torque` is optional. `time`, `force`, and `point` must have the same length.
 
-## Manual Constant Load
+## Constant And Carried Loads
 
-Use a constant load for a simple carried object or setup check.
+Use a manual constant load for a simple applied force:
 
 ```python
 manual_load = mm.external.constant_force(
@@ -83,9 +116,9 @@ manual_load = mm.external.constant_force(
 )
 ```
 
-`force` is in Newtons. In this example, `49.05 N` is roughly a 5 kg object under gravity.
+`49.05 N` is roughly a 5 kg object under gravity.
 
-## Carried Load Shortcut
+For the common carried-load case:
 
 ```python
 bag_load = mm.external.carried_load(
@@ -97,27 +130,47 @@ bag_load = mm.external.carried_load(
 )
 ```
 
-This is a convenience wrapper around `constant_force()` with a global downward force.
-
 ## Estimated Ground Reaction Forces
 
 When measured forces are unavailable, `estimate_grf()` can create approximate vertical contact forces from global 3D pose foot landmarks.
 
 ```python
 estimated_loads = mm.external.estimate_grf(
-    pose3d=pose3d_global,
+    pose3d=run.pose3d_global,
     body_mass_kg=75.0,
     sides=("left", "right"),
 )
 ```
 
-These loads are estimates, not a replacement for measured force plates. They are useful for examples, pipeline testing, and rough exploratory workflows.
+This returns a list of `ExternalLoadsSpec` objects, one per detected side.
 
-## Run Inverse Dynamics
-
-Pass one load or a list of loads:
+## Full ID Example
 
 ```python
+import monomech as mm
+
+trial = mm.load_video("data/subject01.mp4")
+run = trial.run_pipeline(export_csv=True, export_trc=True, output_dir="outputs/subject01")
+
+model_path = mm.get_builtin_osim_model("pose")
+
+scale = trial.run_opensim_scale(
+    model_path=model_path,
+    trc_path=run.trc_path,
+    output_dir="outputs/subject01/scale",
+)
+
+ik = trial.run_opensim_ik(
+    model_path=scale.scaled_model_path,
+    trc_path=run.trc_path,
+    output_dir="outputs/subject01/ik",
+)
+
+estimated_loads = mm.external.estimate_grf(
+    pose3d=run.pose3d_global,
+    body_mass_kg=75.0,
+)
+
 id_result = trial.run_opensim_id(
     model_path=scale.scaled_model_path,
     ik_path=ik.path,
@@ -130,25 +183,32 @@ print(id_result.metadata["external_loads_xml_path"])
 print(id_result.metadata["external_loads_mot_path"])
 ```
 
-## NaNs And Time Alignment
+## Time Alignment And NaNs
 
-OpenSim tools generally expect finite numeric inputs. The `monomech` OpenSim helpers now run a preflight pass:
+OpenSim expects finite numeric inputs. `monomech` handles the common rough edges before launching the tool:
 
-- TRC marker gaps are interpolated before scale and IK when `sanitize_marker_data=True`.
-- IK coordinate NaNs are interpolated before inverse dynamics when `sanitize_coordinates=True`.
-- External force values are resampled to IK time and non-finite values are filled with zero.
-- Generated preflight paths and fill reports are stored in result metadata.
+| Issue | Default handling |
+| --- | --- |
+| External force data has a different sampling rate than IK | Resampled to IK time. |
+| Force value is `NaN`, `inf`, or not numeric | Converted to zero in the generated MOT. |
+| Force data starts after IK starts | Values before the force window are zero. |
+| Force data ends before IK ends | Values after the force window are zero. |
+| IK coordinates contain NaNs before ID | Interpolated when `sanitize_coordinates=True`. |
 
-Disable the automatic fix when you want strict failure:
+Inspect the generated files:
 
 ```python
-from monomech import OpenSimIKConfig, OpenSimIDConfig
+print(id_result.metadata["external_loads_xml_path"])
+print(id_result.metadata["external_loads_mot_path"])
+print(id_result.metadata["coordinate_preflight"])
+```
 
-ik = trial.run_opensim_ik(
-    model_path=scale.scaled_model_path,
-    trc_path=trc_path,
-    config=OpenSimIKConfig(sanitize_marker_data=False),
-)
+## Strict Mode
+
+Disable automatic fixes when you want failures instead of interpolation:
+
+```python
+from monomech import OpenSimIDConfig
 
 id_result = trial.run_opensim_id(
     model_path=scale.scaled_model_path,
@@ -162,8 +222,8 @@ id_result = trial.run_opensim_id(
 
 | Problem | Fix |
 | --- | --- |
-| Force data has a different sampling rate than IK | Pass the load to `run_opensim_id()`; it is resampled to IK time automatically. |
-| Force data contains isolated NaNs | The generated external-load `.mot` fills non-finite values so OpenSim sees finite data. |
-| TRC marker gaps break scale or IK | Use the default sanitizer, or clean the marker trial with `trial.clean_markers()` before export. |
-| A marker channel is entirely missing | The sanitizer fills it with zero and reports it in metadata; inspect or remove that marker before trusting the result. |
-| ID succeeds but forces look wrong | Check `applied_to_body`, `force_expressed_in`, `point_expressed_in`, units, signs, and center-of-pressure columns. |
+| Force data has a different sampling rate than IK | Pass the load to `run_opensim_id()`; it is resampled automatically. |
+| A force plate file has isolated NaNs | Let the generated MOT fill non-finite values, then inspect the file before interpretation. |
+| ID succeeds but moments look implausible | Check force signs, center-of-pressure units, `applied_to_body`, and coordinate frames. |
+| Estimated GRF produces no loads | Confirm global pose includes foot landmarks such as `left_heel`, `left_foot_index`, and `left_ankle`. |
+| One side has no contact force | Inspect foot landmark height and contact assumptions before interpreting kinetics. |

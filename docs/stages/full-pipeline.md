@@ -2,6 +2,8 @@
 
 The trial-level pipeline wrapper runs the common video pose workflow in one call while still returning stage outputs. Use it after you have already stepped through the staged workflow once.
 
+## Video To TRC
+
 ```python
 import monomech as mm
 
@@ -21,11 +23,13 @@ run = trial.run_pipeline(
 
 The returned `PipelineRun` can contain:
 
-- `pose2d`
-- `pose3d_world`
-- `pose3d_global`
-- `csv_paths`
-- `trc_path`
+| Attribute | Meaning |
+| --- | --- |
+| `pose2d` | 2D landmark result. |
+| `pose3d_world` | MediaPipe world landmark result. |
+| `pose3d_global` | Global 3D pose result suitable for export. |
+| `csv_paths` | CSV files written during export. |
+| `trc_path` | OpenSim-ready TRC path. |
 
 ## Video To Inverse Dynamics
 
@@ -35,6 +39,7 @@ OpenSim scale, IK, external loads, and ID are intentionally separate from `run_p
 import monomech as mm
 
 trial = mm.load_video("data/subject01.mp4")
+
 run = trial.run_pipeline(
     export_csv=True,
     export_trc=True,
@@ -70,8 +75,19 @@ id_result = trial.run_opensim_id(
 print(id_result.path)
 ```
 
+## What To Inspect At Each Stop
+
+| Step | Check |
+| --- | --- |
+| Pose result | Landmark coverage, obvious tracking failures, frame rate, and time vector. |
+| TRC export | Marker names, units, axes, and missing values. |
+| Scale | Scaled model path, setup XML, log, and `scale.metadata["preflight"]`. |
+| IK | `ik.metadata["marker_error_summary"]` and coordinate plots. |
+| External loads | Generated MOT/XML, force signs, center-of-pressure units, and time alignment. |
+| ID | STO columns, sign conventions, and whether moments are plausible for the task. |
+
 ## When To Use It
 
-Use `run_pipeline()` for repeatable processing once you know the video-to-TRC settings you want.
+Use `run_pipeline()` for repeatable video-to-TRC processing once you know the settings you want.
 
-Use the individual stage methods when you are exploring data, debugging model fit, tuning smoothing/export settings, or adding external loads for inverse dynamics.
+Use individual stage methods when you are exploring data, debugging model fit, tuning smoothing/export settings, or adding external loads for inverse dynamics.

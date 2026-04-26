@@ -2,104 +2,66 @@
 
 # monomech
 
-Notebook-first biomechanics for single-camera video, marker data, OpenSim-ready files, and analysis tables you can inspect at every step.
+Single-camera biomechanics that stays inspectable from the first video frame to OpenSim inverse dynamics.
 
 <div class="mono-badges" markdown>
 <span class="mono-badge">Python 3.10-3.12</span>
-<span class="mono-badge">Video to pose to TRC</span>
-<span class="mono-badge">Marker cleanup</span>
-<span class="mono-badge">OpenSim workflows</span>
+<span class="mono-badge">Video to TRC</span>
+<span class="mono-badge">External loads</span>
+<span class="mono-badge">OpenSim IK and ID</span>
 </div>
 
 </section>
 
-`monomech` is built for researchers, students, and developers who want a clear path from raw motion data to reproducible biomechanical artifacts. The library keeps the workflow modular, so you can inspect each result before moving to the next stage.
+`monomech` is built for researchers, students, and developers who want a clear path from raw motion data to reproducible biomechanical files. It keeps each stage separate enough to inspect, but connected enough to run a full pipeline once the inputs look right.
 
-## Choose Your Path
+## Start With Your Input
 
 <div class="grid cards" markdown>
 
--   **Video first**
+-   :material-video-outline: **I have a video**
 
-    Start with a single camera video, estimate pose, export CSV/TRC, and continue into OpenSim when the marker mapping is ready.
+    Estimate 2D pose, lift to world/global 3D, export CSV/TRC, then continue into OpenSim when the marker data checks out.
 
-    [:octicons-arrow-right-24: Start the guide](getting-started.md#video-first-workflow)
+    [:octicons-arrow-right-24: Video workflow](getting-started.md#video-first-workflow)
 
--   **Marker first**
+-   :material-table: **I have a TRC**
 
-    Load an existing TRC file, summarize markers, fill gaps, smooth trajectories, and export a cleaned TRC.
+    Load marker data, summarize missing values, fill gaps, smooth trajectories, and export a cleaned TRC.
 
-    [:octicons-arrow-right-24: Clean marker data](getting-started.md#marker-first-workflow)
+    [:octicons-arrow-right-24: Marker workflow](getting-started.md#marker-first-workflow)
 
--   **OpenSim ready**
+-   :material-weight-lifter: **I need external loads**
 
-    Use bundled model paths, scale a model, run inverse kinematics, and add inverse dynamics when external loads are available.
+    Build OpenSim loads from force plates, arrays, constant loads, carried objects, or estimated ground reaction forces.
 
-    [:octicons-arrow-right-24: OpenSim stage](stages/opensim.md)
+    [:octicons-arrow-right-24: Forces guide](stages/forces.md)
 
--   **Learn by notebook**
+-   :material-run-fast: **I need IK and ID**
 
-    Open the example notebooks and run one small section at a time with your own video or TRC path.
+    Scale a model, run inverse kinematics, inspect marker errors, add external loads, and run inverse dynamics.
 
-    [:octicons-arrow-right-24: Example notebooks](examples.md)
+    [:octicons-arrow-right-24: OpenSim guide](stages/opensim.md)
 
 </div>
 
-## The Workflow
+## End-To-End Map
 
-<div class="mono-path" markdown>
-<div class="mono-step" markdown>
-**Install only what you need**
-
-Base installs import without native video or OpenSim packages. Add extras when a workflow needs them.
-</div>
-<div class="mono-step" markdown>
-**Load a trial**
-
-Use `mm.load_video()` for video workflows or `mm.load_trc()` for marker workflows.
-</div>
-<div class="mono-step" markdown>
-**Inspect intermediate results**
-
-Convert result objects to DataFrames, summaries, CSV files, or TRC files before downstream analysis.
-</div>
-<div class="mono-step" markdown>
-**Move into OpenSim**
-
-Use trial methods for scale, inverse kinematics, and inverse dynamics after checking the marker data.
-</div>
-</div>
-
-## Quick Start
-
-```python
-import monomech as mm
-
-trial = mm.load_video("subject01.mp4")
-
-pose2d = trial.estimate_pose2d()
-pose3d_world = trial.estimate_pose3d_world()
-pose3d_global = trial.estimate_pose3d_global()
-
-pose3d_global.to_csv("outputs/subject01_global.csv")
-pose3d_global.to_trc("outputs/subject01_global.trc")
-```
-
-For marker-first work:
-
-```python
-import monomech as mm
-
-trial = mm.load_trc("walk.trc")
-print(trial.summary())
-
-trial.clean_markers(cutoff_hz=6.0)
-trial.to_trc("outputs/walk_clean.trc")
+```mermaid
+flowchart LR
+  A["Video or TRC"] --> B["Pose / marker data"]
+  B --> C["CSV and TRC exports"]
+  C --> D["OpenSim scale"]
+  D --> E["Inverse kinematics"]
+  F["Measured or estimated external loads"] --> G["ExternalLoads.xml + MOT"]
+  E --> H["Inverse dynamics"]
+  G --> H
+  H --> I["STO tables for analysis"]
 ```
 
 ## Install
 
-=== "Base"
+=== "Base import and TRC tools"
 
     ```bash
     python -m pip install monomech
@@ -111,7 +73,7 @@ trial.to_trc("outputs/walk_clean.trc")
     python -m pip install "monomech[pose]"
     ```
 
-=== "OpenSim bindings"
+=== "OpenSim"
 
     ```bash
     python -m pip install "monomech[opensim]"
@@ -123,28 +85,89 @@ trial.to_trc("outputs/walk_clean.trc")
     python -m pip install "monomech[all]"
     ```
 
-<div class="mono-callout" markdown>
-Base installation is intentionally lightweight. If `import monomech` fails after install, upgrade to `0.15.1` or newer so optional native dependencies are not required at import time.
-</div>
+!!! tip "Start light"
+    The base install is intentionally lightweight. Optional video and OpenSim packages are imported only when their workflows need them.
 
-## Where To Go Next
+## First Video Export
+
+```python
+from pathlib import Path
+import monomech as mm
+
+video_path = Path("data/subject01.mp4")
+output_dir = Path("outputs/subject01")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+trial = mm.load_video(video_path)
+run = trial.run_pipeline(
+    export_csv=True,
+    export_trc=True,
+    output_dir=output_dir,
+)
+
+print(run.csv_paths)
+print(run.trc_path)
+```
+
+## First OpenSim Run
+
+```python
+model_path = mm.get_builtin_osim_model("pose")
+
+scale = trial.run_opensim_scale(
+    model_path=model_path,
+    trc_path=run.trc_path,
+    output_dir=output_dir / "scale",
+)
+
+ik = trial.run_opensim_ik(
+    model_path=scale.scaled_model_path,
+    trc_path=run.trc_path,
+    output_dir=output_dir / "ik",
+)
+
+estimated_loads = mm.external.estimate_grf(
+    pose3d=run.pose3d_global,
+    body_mass_kg=75.0,
+)
+
+id_result = trial.run_opensim_id(
+    model_path=scale.scaled_model_path,
+    ik_path=ik.path,
+    external_forces=estimated_loads,
+    output_dir=output_dir / "id",
+)
+```
+
+## Built-In Preflight Checks
+
+OpenSim tools can fail on NaNs, infinite values, mismatched timing, or missing files. `monomech` preflights the common problems before running the tools:
+
+| Stage | Default behavior | Where to inspect |
+| --- | --- | --- |
+| Scale | Interpolates TRC marker gaps when needed. | `scale.metadata["preflight"]` |
+| IK | Interpolates TRC marker gaps and stores marker error summaries. | `ik.metadata["preflight"]` |
+| ID | Interpolates IK coordinate NaNs before inverse dynamics. | `id_result.metadata["coordinate_preflight"]` |
+| External loads | Resamples loads to IK time and fills non-finite force values. | `id_result.metadata["external_loads_mot_path"]` |
+
+## Recommended Next Steps
 
 <div class="grid cards" markdown>
 
--   :material-run-fast: **First complete run**
+-   **New users**
 
-    [Getting started](getting-started.md) walks through installation, verification, exports, and troubleshooting.
+    Follow [Getting started](getting-started.md) from environment setup through exports and troubleshooting.
 
--   :material-notebook-outline: **Notebook examples**
+-   **Examples**
 
-    [Examples](examples.md) links to ready-to-edit notebooks for video, marker cleanup, and OpenSim setup.
+    Open [Example notebooks](examples.md) for video, marker cleanup, OpenSim setup, and video-to-ID.
 
--   :material-folder-table-outline: **Outputs**
+-   **External loads**
 
-    [Outputs and files](outputs.md) explains CSV, TRC, MOT, STO, model, and package artifacts.
+    Read [External loads and forces](stages/forces.md) before trusting inverse dynamics results.
 
--   :material-source-branch: **Modular stages**
+-   **Outputs**
 
-    [Stage guides](stages/index.md) explain each processing step separately.
+    Use [Outputs and files](outputs.md) to understand CSV, TRC, MOT, STO, XML, and model artifacts.
 
 </div>

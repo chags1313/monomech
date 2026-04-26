@@ -147,6 +147,25 @@ print(id_result.metadata["external_loads_mot_path"])
 print(id_result.metadata["coordinate_preflight"])
 ```
 
+## 5. Animation Export
+
+Export the IK motion and optional ID metadata to one portable `.glb` file:
+
+```python
+animation = mm.save_opensim_animation(
+    osim_path=scale.scaled_model_path,
+    mot_path=ik.path,
+    id_path=id_result.path,
+    out_glb_path="outputs/subject01/animation/subject01_ik_id.glb",
+    stride=2,
+    decimate_target_reduction=0.35,
+)
+
+print(animation.glb_path)
+```
+
+See [OpenSim animation export](animation.md) for viewer creation, marker-position exports, and file-size controls.
+
 ## Preflight And NaN Handling
 
 OpenSim is sensitive to NaNs and infinite values. The helpers run automatic preflight fixes by default.

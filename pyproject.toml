@@ -41,10 +41,17 @@ pose = [
 opensim = [
   "pyopensim>=4.5.2.0,<5",
 ]
+animation = [
+  "pyopensim>=4.5.2.0,<5",
+  "pyvista>=0.44,<1",
+  "pygltflib>=1.16,<2",
+]
 all = [
   "mediapipe>=0.10.31,<0.11",
   "opencv-python-headless>=4.8,<5",
   "pyopensim>=4.5.2.0,<5",
+  "pyvista>=0.44,<1",
+  "pygltflib>=1.16,<2",
 ]
 notebook = [
   "jupyter>=1,<2",

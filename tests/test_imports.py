@@ -1,12 +1,16 @@
-import monomech as mm
-import tomllib
 from pathlib import Path
+
+import tomllib
+
+import monomech as mm
 
 
 def test_public_api():
     assert hasattr(mm, "load_video")
     assert hasattr(mm, "load_trc")
     assert hasattr(mm, "external")
+    assert hasattr(mm, "save_opensim_animation")
+    assert hasattr(mm, "save_ik_animation")
 
 
 def test_native_dependencies_are_optional():
@@ -17,5 +21,7 @@ def test_native_dependencies_are_optional():
     assert "mediapipe" not in dependencies
     assert "opencv-python-headless" not in dependencies
     assert "pyopensim" not in dependencies
+    assert "pyvista" not in dependencies
+    assert "pygltflib" not in dependencies
     assert "numpy>=1.26,<2" in dependencies
-    assert {"pose", "opensim", "all"} <= set(extras)
+    assert {"pose", "opensim", "animation", "all"} <= set(extras)

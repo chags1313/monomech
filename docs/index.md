@@ -9,6 +9,7 @@ Single-camera biomechanics that stays inspectable from the first video frame to 
 <span class="mono-badge">Video to TRC</span>
 <span class="mono-badge">External loads</span>
 <span class="mono-badge">OpenSim IK and ID</span>
+<span class="mono-badge">GLB animation</span>
 </div>
 
 </section>
@@ -43,6 +44,12 @@ Single-camera biomechanics that stays inspectable from the first video frame to 
 
     [:octicons-arrow-right-24: OpenSim guide](stages/opensim.md)
 
+-   :material-cube-scan: **I need an animation**
+
+    Export IK motion and optional ID metadata into a single portable `.glb` file.
+
+    [:octicons-arrow-right-24: Animation export](stages/animation.md)
+
 </div>
 
 ## End-To-End Map
@@ -57,6 +64,8 @@ flowchart LR
   E --> H["Inverse dynamics"]
   G --> H
   H --> I["STO tables for analysis"]
+  E --> J["Animated GLB"]
+  H --> J
 ```
 
 ## Install
@@ -77,6 +86,12 @@ flowchart LR
 
     ```bash
     python -m pip install "monomech[opensim]"
+    ```
+
+=== "Animation"
+
+    ```bash
+    python -m pip install "monomech[animation]"
     ```
 
 === "Everything"
@@ -137,6 +152,13 @@ id_result = trial.run_opensim_id(
     external_forces=estimated_loads,
     output_dir=output_dir / "id",
 )
+
+animation = mm.save_opensim_animation(
+    osim_path=scale.scaled_model_path,
+    mot_path=ik.path,
+    id_path=id_result.path,
+    out_glb_path=output_dir / "animation" / "subject01_ik_id.glb",
+)
 ```
 
 ## Built-In Preflight Checks
@@ -169,5 +191,9 @@ OpenSim tools can fail on NaNs, infinite values, mismatched timing, or missing f
 -   **Outputs**
 
     Use [Outputs and files](outputs.md) to understand CSV, TRC, MOT, STO, XML, and model artifacts.
+
+-   **Animations**
+
+    Export a single GLB from IK and ID outputs with [OpenSim animation export](stages/animation.md).
 
 </div>

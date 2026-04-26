@@ -79,6 +79,7 @@ nav:
       - Global pose: stages/global-pose.md
       - External loads and forces: stages/forces.md
       - OpenSim scale, IK, and ID: stages/opensim.md
+      - OpenSim animation export: stages/animation.md
       - Full video-to-ID pipeline: stages/full-pipeline.md
   - Outputs and files: outputs.md
   - GATMA model guide: gatma-model.md

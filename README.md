@@ -15,6 +15,7 @@ Full documentation: [chags1313.github.io/monomech](https://chags1313.github.io/m
 - Export readable CSV and OpenSim-compatible TRC files.
 - Run pose estimation, marker cleanup, scaling, inverse kinematics, and inverse dynamics as separate inspectable steps.
 - Create OpenSim external loads from measured force data, arrays, carried loads, or estimated ground reaction forces.
+- Export IK-driven OpenSim animations to a single portable GLB file.
 - Keep OpenSim preflight checks on by default so NaNs and isolated gaps are fixed before IK and ID runs.
 - Import the base package without installing heavy optional video or OpenSim dependencies.
 
@@ -30,6 +31,7 @@ Choose extras only when you need them:
 | --- | --- |
 | Video pose estimation | `python -m pip install "monomech[pose]"` |
 | OpenSim Python bindings | `python -m pip install "monomech[opensim]"` |
+| OpenSim animation export | `python -m pip install "monomech[animation]"` |
 | Notebooks and plots | `python -m pip install "monomech[notebook]"` |
 | Everything optional | `python -m pip install "monomech[all]"` |
 
@@ -106,6 +108,21 @@ print(id_result.path)
 print(id_result.metadata["external_loads_xml_path"])
 ```
 
+Export the IK and ID run to one portable animation file:
+
+```python
+animation = mm.save_opensim_animation(
+    osim_path=scale.scaled_model_path,
+    mot_path=ik.path,
+    id_path=id_result.path,
+    out_glb_path="outputs/subject01/animation/subject01_ik_id.glb",
+    stride=2,
+    decimate_target_reduction=0.35,
+)
+
+print(animation.glb_path)
+```
+
 For measured force plates, build an external-load spec from your force table:
 
 ```python
@@ -150,6 +167,7 @@ The `examples/` folder includes ready-to-edit notebooks:
 - [Example notebooks](https://chags1313.github.io/monomech/examples/)
 - [External loads and forces](https://chags1313.github.io/monomech/stages/forces/)
 - [OpenSim scale, IK, and ID](https://chags1313.github.io/monomech/stages/opensim/)
+- [OpenSim animation export](https://chags1313.github.io/monomech/stages/animation/)
 - [Full video-to-ID pipeline](https://chags1313.github.io/monomech/stages/full-pipeline/)
 - [Outputs and files](https://chags1313.github.io/monomech/outputs/)
 

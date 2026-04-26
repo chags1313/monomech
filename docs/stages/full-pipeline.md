@@ -72,7 +72,15 @@ id_result = trial.run_opensim_id(
     output_dir="outputs/subject01/id",
 )
 
+animation = mm.save_opensim_animation(
+    osim_path=scale.scaled_model_path,
+    mot_path=ik.path,
+    id_path=id_result.path,
+    out_glb_path="outputs/subject01/animation/subject01_ik_id.glb",
+)
+
 print(id_result.path)
+print(animation.glb_path)
 ```
 
 ## What To Inspect At Each Stop
@@ -85,6 +93,7 @@ print(id_result.path)
 | IK | `ik.metadata["marker_error_summary"]` and coordinate plots. |
 | External loads | Generated MOT/XML, force signs, center-of-pressure units, and time alignment. |
 | ID | STO columns, sign conventions, and whether moments are plausible for the task. |
+| Animation | GLB size, dropped nodes, missing geometry, and whether the motion looks plausible. |
 
 ## When To Use It
 

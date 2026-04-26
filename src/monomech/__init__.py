@@ -1,5 +1,12 @@
 """MonoMech public API."""
 
+from .animation import (
+    OpenSimAnimationResult,
+    save_animation_viewer,
+    save_ik_animation,
+    save_opensim_animation,
+    show_ik_animation,
+)
 from .config import (
     ButterworthConfig,
     GapFillConfig,
@@ -16,13 +23,13 @@ from .external import ExternalLoadsSpec, external
 from .io.model import build_marker_map, inspect_model_markers
 from .io.trc import load_marker_dataframe, load_trc
 from .io.video import load_video, load_videos
-from .viz import install_plot_methods
 from .resources import (
     builtin_osim_model_path,
     builtin_pose_model_path,
     get_builtin_osim_model,
     list_builtin_osim_models,
 )
+from .viz import install_plot_methods
 
 install_plot_methods()
 
@@ -33,6 +40,11 @@ __all__ = [
     "Study",
     "ExternalLoadsSpec",
     "external",
+    "OpenSimAnimationResult",
+    "save_opensim_animation",
+    "save_ik_animation",
+    "save_animation_viewer",
+    "show_ik_animation",
     "load_video",
     "load_videos",
     "load_trc",

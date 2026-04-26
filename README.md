@@ -16,6 +16,7 @@ Full documentation: [chags1313.github.io/monomech](https://chags1313.github.io/m
 - Run pose estimation, marker cleanup, scaling, inverse kinematics, and inverse dynamics as separate inspectable steps.
 - Create OpenSim external loads from measured force data, arrays, carried loads, or estimated ground reaction forces.
 - Export IK-driven OpenSim animations to a single portable GLB file.
+- Review GLB meshes, markers, external-force arrows, IK traces, and ID traces in a Three.js HTML viewer.
 - Keep OpenSim preflight checks on by default so NaNs and isolated gaps are fixed before IK and ID runs.
 - Import the base package without installing heavy optional video or OpenSim dependencies.
 
@@ -115,6 +116,7 @@ animation = mm.save_opensim_animation(
     osim_path=scale.scaled_model_path,
     mot_path=ik.path,
     id_path=id_result.path,
+    geom_dir="models/FullBodyModel-4.0/Geometry",
     out_glb_path="outputs/subject01/animation/subject01_ik_id.glb",
     stride=2,
     decimate_target_reduction=0.35,
@@ -123,7 +125,7 @@ animation = mm.save_opensim_animation(
 print(animation.glb_path)
 ```
 
-Create a notebook-friendly dashboard with 3D motion, force arrows, IK plots, and ID plots:
+Create a notebook-friendly Three.js dashboard with the animated model, marker fallback, force arrows, IK plots, and ID plots:
 
 ```python
 viewer = mm.save_opensim_visualizer(
@@ -137,6 +139,10 @@ viewer = mm.save_opensim_visualizer(
 
 viewer
 ```
+
+The dashboard is a standalone HTML file, so it works in notebooks, local browsers, and GitHub Pages. It also includes an **Upload GLB** control, which lets a reader drag in their own exported model without sending the file anywhere.
+
+Geometry note: pass `geom_dir` to the real OpenSim `Geometry/` folder. If your model came from a macOS-created zip, avoid the `__MACOSX` folder because it usually contains only tiny `._*.vtp` metadata files, not usable meshes.
 
 For measured force plates, build an external-load spec from your force table:
 

@@ -30,7 +30,7 @@ print(result.glb_path)
 print(result.metadata["node_count"])
 ```
 
-If `geom_dir` is omitted, `monomech` looks next to the model for `Geometry/`, `geometry/`, and then the model directory itself.
+If `geom_dir` is omitted, `monomech` looks next to the model for `Geometry/`, `geometry/`, and then the model directory itself. For full-body models downloaded from zip archives, make sure this points at the real mesh folder, not a `__MACOSX` metadata folder. A good folder contains real `.vtp`, `.obj`, or `.stl` mesh files, not tiny `._name.vtp` files.
 
 ## IK And ID Together
 
@@ -87,11 +87,26 @@ animation = mm.save_opensim_animation(
     osim_path=scale.scaled_model_path,
     mot_path=ik.path,
     id_path=id_result.path,
+    geom_dir="models/FullBodyModel-4.0/Geometry",
     out_glb_path="outputs/subject01/animation/subject01_ik_id.glb",
     stride=2,
     decimate_target_reduction=0.35,
 )
 ```
+
+That is the complete review path: video in, pose tracking, OpenSim scale, IK, external loads, ID, and a browser-ready animated model out.
+
+## Geometry Folder Checklist
+
+The GLB exporter uses the OpenSim model file for body transforms and the geometry folder for visual meshes. If the animation plays but the body is invisible or incomplete, check these first:
+
+| Check | What to do |
+| --- | --- |
+| Real mesh files are present | Open the folder and confirm files such as `r_pelvis.vtp`, `femur_r.vtp`, or similar are normal-sized files. |
+| Avoid `__MACOSX` folders | Those folders usually contain `._*.vtp` metadata files and are not usable mesh geometry. |
+| Match model and geometry family | Use the `Geometry/` folder that came with the `.osim` model whenever possible. |
+| Pass `geom_dir` explicitly | Do this when the model and meshes are not next to each other. |
+| Start with a preview export | Use `stride=3` and `decimate_target_reduction=0.5`, then lower those settings for final review. |
 
 ## Marker Positions
 
@@ -115,7 +130,7 @@ animation = mm.save_opensim_animation(
 
 ## HTML Viewer
 
-Write a lightweight local viewer for the GLB:
+Write a lightweight local Three.js viewer for the GLB:
 
 ```python
 viewer = mm.save_animation_viewer(
@@ -126,17 +141,18 @@ viewer = mm.save_animation_viewer(
 print(viewer)
 ```
 
-Open `viewer.html` in a browser to inspect the animation.
+Open `viewer.html` in a browser to inspect the animation. The viewer also has an **Upload GLB** control, so you can reuse the same page with a new exported model.
 
 ## Notebook IK/ID Dashboard
 
-For notebooks and review sessions, use `save_opensim_visualizer()`. It creates a richer HTML dashboard with:
+For notebooks and review sessions, use `save_opensim_visualizer()`. It creates a richer Three.js HTML dashboard with:
 
-- a 3D marker/skeleton animation
+- animated OpenSim GLB mesh playback when a model is available
+- a 3D marker/skeleton fallback
 - external-force arrows from the generated external-load `.mot`
 - synchronized IK coordinate plots
 - inverse-dynamics trace plots
-- an optional GLB model tab when a GLB file is available
+- a browser-side **Upload GLB** control for GitHub Pages and notebook sharing
 
 ```python
 viewer = mm.save_opensim_visualizer(
@@ -153,6 +169,8 @@ viewer
 ```
 
 In Jupyter, the returned object displays as an embedded iframe. In a script, open `viewer.html` in a browser.
+
+The same visualizer works well on GitHub Pages because it does not need a Python server. The demo page below lets readers upload their own `.glb` export directly in the browser:
 
 You can also build the dashboard without mesh geometry:
 
@@ -173,6 +191,27 @@ viewer = mm.save_opensim_visualizer(
 ```
 
 [Open a small visualizer demo](../assets/visualizer-demo.html){ .md-button }
+
+## External Forces In The Viewer
+
+When `external_loads_path` is provided, the dashboard reads the external-load `.mot` and displays force vectors as orange arrows in the 3D scene. The expected columns follow OpenSim-style force and point naming:
+
+```text
+time right_vx right_vy right_vz right_px right_py right_pz
+```
+
+Each load needs velocity/force components ending in `_vx`, `_vy`, `_vz` and matching point columns ending in `_px`, `_py`, `_pz`. The viewer interpolates those vectors onto the displayed marker frames, scales the arrows for readability, and keeps them synchronized with the IK and ID plots.
+
+```python
+viewer = mm.save_opensim_visualizer(
+    "outputs/subject01/animation/forces_viewer.html",
+    marker_dataframe=animation.marker_dataframe,
+    ik_path=ik.path,
+    id_path=id_result.path,
+    external_loads_path="outputs/subject01/id/subject01_external_loads.mot",
+    glb_path=animation.glb_path,
+)
+```
 
 ## File Size And Speed
 

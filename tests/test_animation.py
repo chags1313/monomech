@@ -12,8 +12,9 @@ def test_animation_viewer_uses_relative_glb(tmp_path):
     html = mm.save_animation_viewer(tmp_path / "viewer.html", glb, title="Test animation")
 
     text = html.read_text(encoding="utf-8")
-    assert 'src="motion.glb"' in text
-    assert "model-viewer" in text
+    assert '"glb_path": "motion.glb"' in text
+    assert "GLTFLoader" in text
+    assert "Upload GLB" in text
     assert "Test animation" in text
 
 
@@ -77,7 +78,8 @@ def test_opensim_visualizer_writes_dashboard_without_glb(tmp_path):
     )
 
     text = result.html_path.read_text(encoding="utf-8")
-    assert "3D markers + forces" in text
+    assert "Three.js model playback" in text
+    assert "Upload GLB" in text
     assert "pelvis_tilt" in text
     assert "knee_angle_r_moment" in text
     assert "external forces" in text

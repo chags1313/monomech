@@ -1089,42 +1089,182 @@ def save_animation_viewer(
     *,
     title: str = "monomech OpenSim animation",
 ) -> Path:
-    """Write a small self-contained HTML viewer for a GLB animation."""
+    """Write a small Three.js HTML viewer for a GLB animation."""
 
     html_path = Path(html_path).expanduser().resolve()
     glb_path = Path(glb_path)
     html_path.parent.mkdir(parents=True, exist_ok=True)
-    rel_glb = glb_path.as_posix()
-    if glb_path.is_absolute():
-        try:
-            rel_glb = glb_path.resolve().relative_to(html_path.parent).as_posix()
-        except ValueError:
-            rel_glb = glb_path.resolve().as_uri()
+    glb_ref = _asset_reference(glb_path, html_path.parent)
+    payload = {"title": title, "glb_path": glb_ref}
+    _write_simple_glb_viewer_html(html_path, title=title, payload=payload)
+    return html_path
 
-    payload = json.dumps({"title": title, "glb": rel_glb})
-    html = f"""<!doctype html>
+
+def _asset_reference(path: Path, relative_to: Path) -> str:
+    ref = path.as_posix()
+    if path.is_absolute():
+        resolved = path.expanduser().resolve()
+        try:
+            ref = resolved.relative_to(relative_to).as_posix()
+        except ValueError:
+            ref = resolved.as_uri()
+    return ref
+
+
+def _write_simple_glb_viewer_html(html_path: Path, *, title: str, payload: dict[str, Any]) -> Path:
+    safe_title = escape(title)
+    payload_json = json.dumps(_json_safe(payload), allow_nan=False)
+    html = """<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{title}</title>
+  <title>__TITLE__</title>
   <style>
-    html, body {{ height: 100%; margin: 0; background: #f7f8fb; color: #1e252b; }}
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; }}
-    model-viewer {{ width: 100%; height: 100%; background: #f7f8fb; }}
-    .bar {{ position: fixed; top: 0; left: 0; right: 0; z-index: 2; padding: 10px 14px;
-      background: rgba(255,255,255,.86); border-bottom: 1px solid rgba(20,20,20,.12); }}
+    :root { --ink:#17211e; --muted:#66736f; --line:#d9e2df; --accent:#0f766e; --bg:#f5f7f6; --panel:#ffffff; }
+    * { box-sizing:border-box; }
+    html, body { height:100%; margin:0; background:var(--bg); color:var(--ink); }
+    body { font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; overflow:hidden; }
+    #viewer { width:100vw; height:100vh; display:block; }
+    .bar { position:fixed; top:0; left:0; right:0; z-index:3; display:flex; gap:12px; align-items:center; justify-content:space-between;
+      padding:10px 14px; background:rgba(255,255,255,.9); border-bottom:1px solid var(--line); backdrop-filter:blur(14px); }
+    .title { font-size:15px; font-weight:760; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .tools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+    button, label, select { border:1px solid var(--line); background:white; border-radius:6px; padding:7px 10px; font:inherit; font-size:13px; }
+    button, label { cursor:pointer; color:var(--accent); font-weight:740; }
+    input[type=file] { display:none; }
+    .hint { color:var(--muted); font-size:12px; }
   </style>
-  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
 </head>
 <body>
-  <div class="bar">{title}</div>
-  <model-viewer id="viewer" src="{rel_glb}" camera-controls autoplay animation-name="ik_motion"
-    shadow-intensity="0.35" exposure="1.0"></model-viewer>
-  <script type="application/json" id="monomech-viewer">{payload}</script>
+  <div class="bar">
+    <div class="title">__TITLE__</div>
+    <div class="tools">
+      <button id="play">Pause</button>
+      <select id="speed" title="Playback speed">
+        <option value="0.5">0.5x</option>
+        <option value="1" selected>1x</option>
+        <option value="1.5">1.5x</option>
+        <option value="2">2x</option>
+      </select>
+      <label>Upload GLB<input id="glbUpload" type="file" accept=".glb,model/gltf-binary"></label>
+      <span class="hint" id="status">Loading model...</span>
+    </div>
+  </div>
+  <canvas id="viewer"></canvas>
+  <script id="payload" type="application/json">__PAYLOAD__</script>
+  <script type="importmap">
+    {"imports":{"three":"https://unpkg.com/three@0.161.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.161.0/examples/jsm/"}}
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const data = JSON.parse(document.getElementById('payload').textContent);
+    const canvas = document.getElementById('viewer');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf5f7f6);
+    const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 1000);
+    camera.position.set(2.2, 1.5, 3.0);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 0.8, 0);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xb7c0bd, 2.4));
+    const key = new THREE.DirectionalLight(0xffffff, 2.6);
+    key.position.set(3, 5, 4);
+    scene.add(key);
+    const grid = new THREE.GridHelper(4, 20, 0xb8c7c2, 0xe1e8e5);
+    scene.add(grid);
+
+    const loader = new GLTFLoader();
+    const clock = new THREE.Clock();
+    let root = null, mixer = null, duration = 0, playing = true;
+    const status = document.getElementById('status');
+    const speed = document.getElementById('speed');
+
+    function disposeObject(obj) {
+      obj.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose?.());
+          else child.material.dispose?.();
+        }
+      });
+    }
+    function frameObject(obj) {
+      const box = new THREE.Box3().setFromObject(obj);
+      if (!Number.isFinite(box.min.x) || box.isEmpty()) return;
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const radius = Math.max(size.x, size.y, size.z, 1e-3);
+      controls.target.copy(center);
+      camera.position.set(center.x + radius * 1.5, center.y + radius * 0.8, center.z + radius * 2.0);
+      camera.near = Math.max(radius / 1000, 0.001);
+      camera.far = Math.max(radius * 20, 10);
+      camera.updateProjectionMatrix();
+    }
+    function loadGlb(url) {
+      status.textContent = 'Loading model...';
+      loader.load(url, (gltf) => {
+        if (root) { scene.remove(root); disposeObject(root); }
+        root = gltf.scene;
+        root.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            if (child.material) child.material.side = THREE.DoubleSide;
+          }
+        });
+        scene.add(root);
+        mixer = gltf.animations.length ? new THREE.AnimationMixer(root) : null;
+        if (mixer) {
+          const action = mixer.clipAction(gltf.animations[0]);
+          action.play();
+          duration = gltf.animations[0].duration || 0;
+        }
+        frameObject(root);
+        status.textContent = mixer ? `Animation: ${duration.toFixed(2)} s` : 'Model loaded';
+      }, undefined, (error) => {
+        console.error(error);
+        status.textContent = 'Could not load model. Use Upload GLB.';
+      });
+    }
+    if (data.glb_path) loadGlb(data.glb_path);
+
+    document.getElementById('glbUpload').addEventListener('change', (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      loadGlb(URL.createObjectURL(file));
+    });
+    document.getElementById('play').addEventListener('click', (event) => {
+      playing = !playing;
+      event.currentTarget.textContent = playing ? 'Pause' : 'Play';
+    });
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta() * Number(speed.value || 1);
+      if (playing && mixer) mixer.update(dt);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
 </body>
 </html>
 """
+    html = html.replace("__TITLE__", safe_title).replace("__PAYLOAD__", payload_json)
     html_path.write_text(html, encoding="utf-8", newline="\n")
     return html_path
 
@@ -1279,60 +1419,79 @@ def _write_visualizer_html(
     html_path.parent.mkdir(parents=True, exist_ok=True)
     payload_json = json.dumps(_json_safe(payload), allow_nan=False)
     safe_title = escape(title)
-    html = f"""<!doctype html>
+    html = """<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{safe_title}</title>
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+  <title>__TITLE__</title>
   <style>
-    :root {{ --ink:#15201d; --muted:#63716e; --line:#d7dfdd; --panel:#fff; --bg:#f4f7f6; --accent:#0f766e; --force:#d65a31; }}
-    * {{ box-sizing:border-box; }}
-    body {{ margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--ink); }}
-    header {{ padding:18px 22px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.92); position:sticky; top:0; z-index:5; backdrop-filter:blur(12px); }}
-    h1 {{ margin:0; font-size:22px; letter-spacing:0; }}
-    .sub {{ color:var(--muted); margin-top:4px; font-size:13px; }}
-    main {{ display:grid; grid-template-columns:minmax(420px, 1.25fr) minmax(360px, .75fr); gap:14px; padding:14px; }}
-    section {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }}
-    .panel-title {{ padding:10px 12px; border-bottom:1px solid var(--line); font-weight:750; font-size:13px; display:flex; justify-content:space-between; gap:10px; align-items:center; }}
-    #scene {{ height:620px; }}
-    #glbPanel {{ display:none; height:620px; }}
-    model-viewer {{ width:100%; height:100%; background:#f8faf9; }}
-    .controls {{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-top:1px solid var(--line); background:#fbfcfc; }}
-    button, select {{ border:1px solid var(--line); background:white; border-radius:6px; padding:7px 10px; font:inherit; }}
-    button {{ cursor:pointer; font-weight:700; color:var(--accent); }}
-    input[type=range] {{ flex:1; accent-color:var(--accent); }}
-    .stack {{ display:grid; gap:14px; }}
-    .plot {{ height:265px; }}
-    .stats {{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:10px; }}
-    .stat {{ border:1px solid var(--line); border-radius:8px; padding:9px; background:#fbfcfc; }}
-    .stat b {{ display:block; font-size:18px; }}
-    .stat span {{ color:var(--muted); font-size:12px; }}
-    .tabs {{ display:flex; gap:6px; padding:8px; border-bottom:1px solid var(--line); background:#fbfcfc; }}
-    .tab.active {{ background:var(--accent); color:white; border-color:var(--accent); }}
-    @media (max-width: 980px) {{ main {{ grid-template-columns:1fr; }} #scene, #glbPanel {{ height:520px; }} }}
+    :root { --ink:#17211e; --muted:#66736f; --line:#d9e2df; --panel:#ffffff; --bg:#f5f7f6; --accent:#0f766e; --force:#d65a31; --soft:#eef4f1; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--ink); }
+    header { padding:16px 20px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.93); position:sticky; top:0; z-index:5; backdrop-filter:blur(14px); }
+    h1 { margin:0; font-size:22px; letter-spacing:0; }
+    .sub { color:var(--muted); margin-top:4px; font-size:13px; line-height:1.4; }
+    main { display:grid; grid-template-columns:minmax(470px, 1.28fr) minmax(360px, .72fr); gap:14px; padding:14px; align-items:start; }
+    section { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; box-shadow:0 8px 22px rgba(37,53,48,.05); }
+    .panel-title { min-height:42px; padding:10px 12px; border-bottom:1px solid var(--line); font-weight:760; font-size:13px; display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .visual-wrap { position:relative; height:650px; background:#eef3f1; }
+    #threeScene { width:100%; height:100%; display:block; }
+    .viewer-tools { display:flex; align-items:center; gap:8px; padding:10px 12px; border-top:1px solid var(--line); background:#fbfcfc; flex-wrap:wrap; }
+    button, select, label { border:1px solid var(--line); background:white; border-radius:6px; padding:7px 10px; font:inherit; font-size:13px; }
+    button, label { cursor:pointer; font-weight:740; color:var(--accent); }
+    button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+    input[type=range] { flex:1; min-width:160px; accent-color:var(--accent); }
+    input[type=file] { display:none; }
+    .legend { position:absolute; left:12px; bottom:12px; display:flex; gap:8px; flex-wrap:wrap; z-index:2; }
+    .pill { background:rgba(255,255,255,.88); border:1px solid var(--line); border-radius:999px; padding:5px 9px; font-size:12px; color:var(--muted); }
+    .stack { display:grid; gap:14px; }
+    .plotbox { padding:10px 10px 12px; }
+    canvas.plot { width:100%; height:230px; display:block; border:1px solid var(--line); border-radius:8px; background:white; }
+    .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:10px; }
+    .stat { border:1px solid var(--line); border-radius:8px; padding:9px; background:#fbfcfc; min-width:0; }
+    .stat b { display:block; font-size:18px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .stat span { color:var(--muted); font-size:12px; }
+    .notice { padding:10px 12px; color:var(--muted); font-size:12px; border-top:1px solid var(--line); background:#fbfcfc; }
+    @media (max-width: 980px) { main { grid-template-columns:1fr; } .visual-wrap { height:540px; } }
+    @media (max-width: 620px) { main { padding:8px; } .stats { grid-template-columns:repeat(2,1fr); } h1 { font-size:18px; } }
   </style>
 </head>
 <body>
   <header>
-    <h1>{safe_title}</h1>
-    <div class="sub">Synchronized 3D markers, external-force arrows, IK coordinates, and inverse-dynamics traces.</div>
+    <h1>__TITLE__</h1>
+    <div class="sub">Three.js model playback with marker fallback, external-force arrows, IK coordinate plots, and inverse-dynamics traces.</div>
   </header>
   <main>
     <section>
-      <div class="tabs">
-        <button class="tab active" data-view="plotly">3D markers + forces</button>
-        <button class="tab" data-view="glb" id="glbTab">GLB model</button>
+      <div class="panel-title">
+        <span>3D Model, Markers, And Forces</span>
+        <span id="viewerStatus" class="sub">Ready</span>
       </div>
-      <div id="scene"></div>
-      <div id="glbPanel"><model-viewer id="glbViewer" camera-controls autoplay shadow-intensity="0.4" exposure="1.0"></model-viewer></div>
-      <div class="controls">
+      <div class="visual-wrap">
+        <canvas id="threeScene"></canvas>
+        <div class="legend">
+          <span class="pill">teal: markers</span>
+          <span class="pill">dark lines: skeleton</span>
+          <span class="pill">orange: external forces</span>
+        </div>
+      </div>
+      <div class="viewer-tools">
         <button id="play">Play</button>
         <input id="scrub" type="range" min="0" max="0" value="0">
         <span id="time">0.000 s</span>
+        <select id="speed" title="Playback speed">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+        <button id="toggleModel" class="active">Model</button>
+        <button id="toggleMarkers" class="active">Markers</button>
+        <button id="toggleForces" class="active">Forces</button>
+        <label>Upload GLB<input id="glbUpload" type="file" accept=".glb,model/gltf-binary"></label>
       </div>
+      <div class="notice">The uploaded GLB stays in your browser. Use this page on GitHub Pages to inspect any monomech-exported animation.</div>
     </section>
     <div class="stack">
       <section>
@@ -1341,23 +1500,32 @@ def _write_visualizer_html(
       </section>
       <section>
         <div class="panel-title">IK Coordinates <select id="ikSelect"></select></div>
-        <div id="ikPlot" class="plot"></div>
+        <div class="plotbox"><canvas id="ikPlot" class="plot"></canvas></div>
       </section>
       <section>
         <div class="panel-title">Inverse Dynamics <select id="idSelect"></select></div>
-        <div id="idPlot" class="plot"></div>
+        <div class="plotbox"><canvas id="idPlot" class="plot"></canvas></div>
       </section>
     </div>
   </main>
-  <script id="payload" type="application/json">{payload_json}</script>
-  <script>
+  <script id="payload" type="application/json">__PAYLOAD__</script>
+  <script type="importmap">
+    {"imports":{"three":"https://unpkg.com/three@0.161.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.161.0/examples/jsm/"}}
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
     const data = JSON.parse(document.getElementById('payload').textContent);
-    const marker = data.markers || {{names:[], time:[], frames:[], segments:[]}};
-    const force = data.forces || {{names:[], frames:[]}};
+    const marker = data.markers || {names:[], time:[], frames:[], segments:[]};
+    const force = data.forces || {names:[], frames:[]};
     const scrub = document.getElementById('scrub');
     const timeLabel = document.getElementById('time');
     const playBtn = document.getElementById('play');
-    let idx = 0, timer = null;
+    const speedSelect = document.getElementById('speed');
+    const status = document.getElementById('viewerStatus');
+    let idx = 0, playing = false, lastTick = 0;
     scrub.max = Math.max(0, marker.frames.length - 1);
 
     document.getElementById('stats').innerHTML = [
@@ -1367,96 +1535,283 @@ def _write_visualizer_html(
       ['IK traces', data.ik?.columns?.length || 0],
       ['ID traces', data.id?.columns?.length || 0],
       ['Duration', marker.time.length ? (marker.time[marker.time.length-1]-marker.time[0]).toFixed(3)+' s' : '0 s']
-    ].map(([k,v]) => `<div class="stat"><b>${{v}}</b><span>${{k}}</span></div>`).join('');
+    ].map(([k,v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
 
-    function frameArrays(i) {{
-      const f = marker.frames[i] || [];
-      return {{x:f.map(p=>p[0]), y:f.map(p=>p[1]), z:f.map(p=>p[2])}};
-    }}
-    function segmentArrays(i) {{
-      const f = marker.frames[i] || [];
-      const xs=[], ys=[], zs=[];
-      for (const [a,b] of marker.segments || []) {{
-        if (!f[a] || !f[b]) continue;
-        xs.push(f[a][0], f[b][0], null); ys.push(f[a][1], f[b][1], null); zs.push(f[a][2], f[b][2], null);
-      }}
-      return {{x:xs,y:ys,z:zs}};
-    }}
-    function forceArrays(i) {{
-      const frames = force.frames || [];
-      const loads = frames[i] || [];
+    const canvas = document.getElementById('threeScene');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf0f4f2);
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 1000);
+    camera.position.set(2.4, 1.5, 3.0);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, .8, 0);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xb7c0bd, 2.5));
+    const key = new THREE.DirectionalLight(0xffffff, 2.6);
+    key.position.set(3, 5, 4);
+    scene.add(key);
+    scene.add(new THREE.GridHelper(4, 20, 0xb7c7c2, 0xdfe9e5));
+
+    const markersGroup = new THREE.Group();
+    const skeletonGroup = new THREE.Group();
+    const forceGroup = new THREE.Group();
+    const modelGroup = new THREE.Group();
+    scene.add(modelGroup, skeletonGroup, markersGroup, forceGroup);
+
+    const markerMaterial = new THREE.MeshStandardMaterial({ color:0x0f766e, roughness:.55, metalness:0.0 });
+    const markerGeom = new THREE.SphereGeometry(0.018, 16, 12);
+    const markerMeshes = marker.names.map((name) => {
+      const mesh = new THREE.Mesh(markerGeom, markerMaterial);
+      mesh.name = name;
+      markersGroup.add(mesh);
+      return mesh;
+    });
+    const skeletonMaterial = new THREE.LineBasicMaterial({ color:0x24302d, linewidth:2 });
+    const skeletonLines = (marker.segments || []).map(([a,b]) => {
+      const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+      const line = new THREE.Line(geom, skeletonMaterial);
+      line.userData = { a, b };
+      skeletonGroup.add(line);
+      return line;
+    });
+
+    function validPoint(p) {
+      return p && p.length === 3 && p.every(Number.isFinite);
+    }
+    function setLinePositions(line, pa, pb) {
+      const pos = line.geometry.attributes.position;
+      pos.setXYZ(0, pa[0], pa[1], pa[2]);
+      pos.setXYZ(1, pb[0], pb[1], pb[2]);
+      pos.needsUpdate = true;
+      line.geometry.computeBoundingSphere();
+    }
+    function updateForces(i) {
+      forceGroup.clear();
+      const loads = (force.frames || [])[i] || [];
       let maxMag = 0;
-      for (const l of loads) maxMag = Math.max(maxMag, Math.hypot(...l.force));
+      for (const load of loads) maxMag = Math.max(maxMag, Math.hypot(...load.force));
       const scale = maxMag > 0 ? (data.force_scale || 0.35) / maxMag : 1;
-      const xs=[], ys=[], zs=[], text=[];
-      for (const l of loads) {{
-        const p=l.point, v=l.force.map(x=>x*scale);
-        xs.push(p[0], p[0]+v[0], null); ys.push(p[1], p[1]+v[1], null); zs.push(p[2], p[2]+v[2], null);
-        text.push(l.name, l.name, '');
-      }}
-      return {{x:xs,y:ys,z:zs,text}};
-    }}
-    const p0 = frameArrays(0), s0 = segmentArrays(0), f0 = forceArrays(0);
-    Plotly.newPlot('scene', [
-      {{type:'scatter3d', mode:'markers', name:'markers', x:p0.x, y:p0.y, z:p0.z, text:marker.names, hoverinfo:'text', marker:{{size:4,color:'#0f766e'}}}},
-      {{type:'scatter3d', mode:'lines', name:'skeleton', x:s0.x, y:s0.y, z:s0.z, line:{{width:5,color:'#24302d'}}, hoverinfo:'skip'}},
-      {{type:'scatter3d', mode:'lines+markers', name:'external forces', x:f0.x, y:f0.y, z:f0.z, text:f0.text, line:{{width:8,color:'#d65a31'}}, marker:{{size:3,color:'#d65a31'}}}}
-    ], {{
-      margin:{{l:0,r:0,b:0,t:0}},
-      scene:{{aspectmode:'data', xaxis:{{title:'X'}}, yaxis:{{title:'Y'}}, zaxis:{{title:'Z'}}}},
-      legend:{{orientation:'h', x:0.02, y:0.98}}
-    }}, {{responsive:true}});
-
-    function updateFrame(i) {{
-      idx = Math.max(0, Math.min(marker.frames.length - 1, i));
-      const p = frameArrays(idx), s = segmentArrays(idx), f = forceArrays(idx);
-      Plotly.restyle('scene', {{x:[p.x], y:[p.y], z:[p.z]}}, [0]);
-      Plotly.restyle('scene', {{x:[s.x], y:[s.y], z:[s.z]}}, [1]);
-      Plotly.restyle('scene', {{x:[f.x], y:[f.y], z:[f.z], text:[f.text]}}, [2]);
+      for (const load of loads) {
+        const p = load.point, v = load.force;
+        if (!validPoint(p) || !validPoint(v)) continue;
+        const mag = Math.hypot(...v);
+        if (!Number.isFinite(mag) || mag <= 1e-9) continue;
+        const dir = new THREE.Vector3(v[0], v[1], v[2]).normalize();
+        const origin = new THREE.Vector3(p[0], p[1], p[2]);
+        const arrow = new THREE.ArrowHelper(dir, origin, Math.max(0.05, mag * scale), 0xd65a31, 0.075, 0.035);
+        forceGroup.add(arrow);
+      }
+    }
+    function updateFrame(i) {
+      const n = Math.max(1, marker.frames.length);
+      idx = ((Math.round(i) % n) + n) % n;
+      const frame = marker.frames[idx] || [];
+      markerMeshes.forEach((mesh, mi) => {
+        const p = frame[mi];
+        mesh.visible = validPoint(p);
+        if (mesh.visible) mesh.position.set(p[0], p[1], p[2]);
+      });
+      skeletonLines.forEach((line) => {
+        const a = frame[line.userData.a], b = frame[line.userData.b];
+        line.visible = validPoint(a) && validPoint(b);
+        if (line.visible) setLinePositions(line, a, b);
+      });
+      updateForces(idx);
       scrub.value = idx;
       timeLabel.textContent = (marker.time[idx] || 0).toFixed(3) + ' s';
-    }}
-    scrub.addEventListener('input', e => updateFrame(Number(e.target.value)));
-    playBtn.addEventListener('click', () => {{
-      if (timer) {{ clearInterval(timer); timer=null; playBtn.textContent='Play'; return; }}
-      playBtn.textContent='Pause';
-      timer = setInterval(() => {{ updateFrame((idx + 1) % marker.frames.length); }}, 45);
-    }});
+      setMixerToFrame(idx);
+    }
+    function resizeRenderer() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      renderer.setSize(rect.width, rect.height, false);
+      camera.aspect = rect.width / rect.height;
+      camera.updateProjectionMatrix();
+    }
+    function frameScene() {
+      const box = new THREE.Box3();
+      let hasBox = false;
+      for (const group of [modelGroup, markersGroup, skeletonGroup]) {
+        const b = new THREE.Box3().setFromObject(group);
+        if (Number.isFinite(b.min.x) && !b.isEmpty()) {
+          if (!hasBox) box.copy(b); else box.union(b);
+          hasBox = true;
+        }
+      }
+      if (!hasBox) return;
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const radius = Math.max(size.x, size.y, size.z, 0.5);
+      controls.target.copy(center);
+      camera.position.set(center.x + radius * 1.35, center.y + radius * 0.75, center.z + radius * 2.0);
+      camera.near = Math.max(radius / 1000, 0.001);
+      camera.far = Math.max(radius * 30, 10);
+      camera.updateProjectionMatrix();
+    }
 
-    function makeSeriesPlot(div, store, selectId, color) {{
+    const loader = new GLTFLoader();
+    let mixer = null, glbDuration = 0, glbRoot = null;
+    function disposeObject(obj) {
+      obj.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose?.());
+          else child.material.dispose?.();
+        }
+      });
+    }
+    function loadGlb(url) {
+      status.textContent = 'Loading GLB...';
+      loader.load(url, (gltf) => {
+        if (glbRoot) { modelGroup.remove(glbRoot); disposeObject(glbRoot); }
+        glbRoot = gltf.scene;
+        glbRoot.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            if (child.material) child.material.side = THREE.DoubleSide;
+          }
+        });
+        modelGroup.add(glbRoot);
+        mixer = gltf.animations.length ? new THREE.AnimationMixer(glbRoot) : null;
+        glbDuration = gltf.animations[0]?.duration || 0;
+        if (mixer) mixer.clipAction(gltf.animations[0]).play();
+        modelGroup.visible = true;
+        document.getElementById('toggleModel').classList.add('active');
+        frameScene();
+        updateFrame(idx);
+        status.textContent = mixer ? `GLB loaded (${glbDuration.toFixed(2)} s)` : 'GLB loaded';
+      }, undefined, (error) => {
+        console.error(error);
+        status.textContent = 'GLB unavailable. Upload one or use markers.';
+      });
+    }
+    function setMixerToFrame(i) {
+      if (!mixer || !glbDuration || marker.time.length < 2) return;
+      const t0 = marker.time[0], t1 = marker.time[marker.time.length - 1];
+      const frac = t1 > t0 ? (marker.time[i] - t0) / (t1 - t0) : 0;
+      mixer.setTime(Math.max(0, Math.min(glbDuration, frac * glbDuration)));
+    }
+    if (data.glb_path) loadGlb(data.glb_path);
+    else status.textContent = 'Upload a GLB or use the marker view.';
+    document.getElementById('glbUpload').addEventListener('change', (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      loadGlb(URL.createObjectURL(file));
+    });
+
+    scrub.addEventListener('input', e => updateFrame(Number(e.target.value)));
+    playBtn.addEventListener('click', () => {
+      playing = !playing;
+      playBtn.textContent = playing ? 'Pause' : 'Play';
+    });
+    function toggleButton(id, group) {
+      const btn = document.getElementById(id);
+      btn.addEventListener('click', () => {
+        group.visible = !group.visible;
+        btn.classList.toggle('active', group.visible);
+      });
+    }
+    toggleButton('toggleModel', modelGroup);
+    toggleButton('toggleMarkers', markersGroup);
+    toggleButton('toggleForces', forceGroup);
+
+    function makeSeriesPlot(canvasId, store, selectId, color) {
+      const canvas = document.getElementById(canvasId);
+      const ctx = canvas.getContext('2d');
       const select = document.getElementById(selectId);
       const cols = store?.columns || [];
-      select.innerHTML = cols.map(c => `<option value="${{c}}">${{c}}</option>`).join('');
-      function draw() {{
+      select.innerHTML = cols.length ? cols.map(c => `<option value="${c}">${c}</option>`).join('') : '<option>No data</option>';
+      function draw() {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = Math.max(320, Math.floor(rect.width * devicePixelRatio));
+        canvas.height = Math.max(210, Math.floor(rect.height * devicePixelRatio));
+        ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+        const w = rect.width, h = rect.height;
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
         const col = select.value || cols[0];
+        const x = store?.time || [];
         const y = store?.series?.[col] || [];
-        Plotly.newPlot(div, [{{type:'scatter', mode:'lines', x:store?.time || [], y, line:{{color, width:2}}, name:col}}], {{
-          margin:{{l:44,r:12,b:34,t:8}}, xaxis:{{title:'time (s)'}}, yaxis:{{title:col}}, paper_bgcolor:'white', plot_bgcolor:'white'
-        }}, {{responsive:true}});
-      }}
-      select.addEventListener('change', draw); draw();
-    }}
-    makeSeriesPlot('ikPlot', data.ik, 'ikSelect', '#0f766e');
-    makeSeriesPlot('idPlot', data.id, 'idSelect', '#d65a31');
+        ctx.strokeStyle = '#d9e2df';
+        ctx.lineWidth = 1;
+        for (let i=0; i<5; i++) {
+          const yy = 22 + i * (h - 50) / 4;
+          ctx.beginPath(); ctx.moveTo(42, yy); ctx.lineTo(w - 12, yy); ctx.stroke();
+        }
+        ctx.fillStyle = '#66736f';
+        ctx.font = '12px system-ui, sans-serif';
+        if (!x.length || !y.length) {
+          ctx.fillText('No series available', 46, h / 2);
+          return;
+        }
+        const finite = y.filter(Number.isFinite);
+        let minY = Math.min(...finite), maxY = Math.max(...finite);
+        if (!Number.isFinite(minY) || !Number.isFinite(maxY)) { minY = 0; maxY = 1; }
+        if (Math.abs(maxY - minY) < 1e-9) { maxY += 1; minY -= 1; }
+        const minX = x[0], maxX = x[x.length - 1] || x[0] + 1;
+        const left = 42, right = w - 12, top = 18, bottom = h - 30;
+        const sx = (v) => left + ((v - minX) / Math.max(1e-12, maxX - minX)) * (right - left);
+        const sy = (v) => bottom - ((v - minY) / (maxY - minY)) * (bottom - top);
+        ctx.fillText(maxY.toPrecision(4), 7, top + 4);
+        ctx.fillText(minY.toPrecision(4), 7, bottom);
+        ctx.fillText('time (s)', Math.max(46, right - 58), h - 8);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        let started = false;
+        for (let i=0; i<Math.min(x.length, y.length); i++) {
+          if (!Number.isFinite(x[i]) || !Number.isFinite(y[i])) { started = false; continue; }
+          const px = sx(x[i]), py = sy(y[i]);
+          if (!started) { ctx.moveTo(px, py); started = true; }
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        if (marker.time.length) {
+          const t = marker.time[idx] || 0;
+          const px = sx(Math.max(minX, Math.min(maxX, t)));
+          ctx.strokeStyle = '#17211e';
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, bottom); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+      select.addEventListener('change', draw);
+      addEventListener('resize', draw);
+      return draw;
+    }
+    const drawIk = makeSeriesPlot('ikPlot', data.ik, 'ikSelect', '#0f766e');
+    const drawId = makeSeriesPlot('idPlot', data.id, 'idSelect', '#d65a31');
 
-    const glbTab = document.getElementById('glbTab');
-    if (data.glb_path) {{
-      document.getElementById('glbViewer').src = data.glb_path;
-    }} else {{
-      glbTab.disabled = true; glbTab.textContent = 'GLB model unavailable';
-    }}
-    document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {{
-      if (btn.disabled) return;
-      document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const glb = btn.dataset.view === 'glb';
-      document.getElementById('scene').style.display = glb ? 'none' : 'block';
-      document.getElementById('glbPanel').style.display = glb ? 'block' : 'none';
-    }}));
+    function animate(now) {
+      requestAnimationFrame(animate);
+      resizeRenderer();
+      if (playing && marker.frames.length) {
+        if (!lastTick) lastTick = now;
+        const elapsed = now - lastTick;
+        const stepMs = 45 / Number(speedSelect.value || 1);
+        if (elapsed >= stepMs) {
+          updateFrame(idx + Math.max(1, Math.floor(elapsed / stepMs)));
+          drawIk(); drawId();
+          lastTick = now;
+        }
+      } else {
+        lastTick = now;
+      }
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    updateFrame(0);
+    frameScene();
+    drawIk(); drawId();
+    animate();
   </script>
 </body>
 </html>
 """
+    html = html.replace("__TITLE__", safe_title).replace("__PAYLOAD__", payload_json)
     html_path.write_text(html, encoding="utf-8", newline="\n")
     return html_path
 

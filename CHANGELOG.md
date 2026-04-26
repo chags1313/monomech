@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.15.3
+
+### Added
+- added notebook-ready IK/ID visualizer with animated markers, external-force arrows, IK plots, ID plots, and a docs demo
+
 ## 0.15.2
 
 ### Added

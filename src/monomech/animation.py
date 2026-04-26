@@ -1,3 +1,5 @@
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import io
@@ -6,6 +8,7 @@ import math
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -27,10 +30,27 @@ class OpenSimAnimationResult:
         return self.marker_dataframe.copy()
 
 
+@dataclass(slots=True)
+class OpenSimVisualizerResult:
+    """Notebook-friendly HTML visualizer output."""
+
+    html_path: Path
+    metadata: dict[str, Any]
+
+    def _repr_html_(self) -> str:
+        uri = self.html_path.resolve().as_uri()
+        return (
+            f'<iframe src="{uri}" width="100%" height="860" '
+            'style="border:0;border-radius:8px;overflow:hidden;"></iframe>'
+        )
+
+
 def _require_animation_dependencies():
     missing = []
     try:
-        import opensim as osim  # type: ignore
+        from .opensim_runtime import require_opensim
+
+        osim = require_opensim()
     except Exception:
         osim = None
         missing.append("pyopensim")
@@ -52,6 +72,20 @@ def _require_animation_dependencies():
             f"{packages}. Install them with `python -m pip install \"monomech[animation]\"`."
         )
     return osim, pv, pygltflib
+
+
+def _require_opensim_dependency():
+    try:
+        from .opensim_runtime import require_opensim
+
+        osim = require_opensim()
+    except Exception as exc:
+        raise ImportError(
+            "OpenSim marker extraction requires OpenSim bindings. Install "
+            '`python -m pip install "monomech[opensim]"` or '
+            '`python -m pip install "monomech[animation]"`.'
+        ) from exc
+    return osim
 
 
 def _tag(elem: ET.Element) -> str:
@@ -493,6 +527,81 @@ def _id_metadata(id_path: str | Path | None, osim) -> dict[str, Any] | None:
         "columns": labels,
         "time_range": [float(times[0]), float(times[-1])] if len(times) else None,
     }
+
+
+def extract_opensim_marker_positions(
+    *,
+    osim_path: str | Path,
+    mot_path: str | Path,
+    t_start: float | None = None,
+    t_end: float | None = None,
+    stride: int = 1,
+) -> pd.DataFrame:
+    """Evaluate OpenSim model marker positions through an IK motion file."""
+
+    osim = _require_opensim_dependency()
+    osim_path = Path(osim_path).expanduser().resolve()
+    mot_path = Path(mot_path).expanduser().resolve()
+    if not osim_path.is_file():
+        raise FileNotFoundError(f"OSIM file not found: {osim_path}")
+    if not mot_path.is_file():
+        raise FileNotFoundError(f"IK MOT/STO file not found: {mot_path}")
+
+    model = osim.Model(str(osim_path))
+    state = model.initSystem()
+    in_degrees, all_times, labels, all_data = _read_mot_or_sto(mot_path, osim)
+    mask = np.ones_like(all_times, dtype=bool)
+    if t_start is not None:
+        mask &= all_times >= float(t_start)
+    if t_end is not None:
+        mask &= all_times <= float(t_end)
+    all_times = all_times[mask]
+    all_data = all_data[mask]
+    if len(all_times) == 0:
+        raise ValueError("No frames remain after applying the selected time window.")
+
+    stride = max(1, int(stride))
+    frame_idx = np.arange(len(all_times))[::stride]
+    times = all_times[frame_idx]
+    data = all_data[frame_idx]
+    mapping, unmatched = _coordinate_mapping(model, labels, in_degrees=in_degrees)
+    if not mapping:
+        raise ValueError(
+            "None of the MOT/STO columns matched coordinates in the OpenSim model. "
+            f"First unmatched labels: {unmatched[:8]}"
+        )
+
+    marker_set = model.getMarkerSet()
+    marker_names = [marker_set.get(i).getName() for i in range(marker_set.getSize())]
+    marker_positions = np.zeros((len(times), 3 * len(marker_names)), dtype=float)
+    degree_to_rad = np.pi / 180.0
+
+    for frame_number, row in enumerate(data):
+        for coord, col, convert_degrees in mapping:
+            value = float(row[col])
+            if convert_degrees:
+                value *= degree_to_rad
+            try:
+                coord.setValue(state, value, True)
+            except Exception:
+                coord.setValue(state, value)
+        model.realizePosition(state)
+
+        for marker_idx in range(marker_set.getSize()):
+            marker = marker_set.get(marker_idx)
+            marker_local = _simtk_vec3_to_np(marker.get_location())
+            parent = marker.getParentFrame()
+            parent_transform = parent.getTransformInGround(state)
+            parent_r = _simtk_rot_to_np(parent_transform.R())
+            marker_global = _simtk_vec3_to_np(parent_transform.p()) + parent_r @ marker_local
+            marker_positions[frame_number, 3 * marker_idx : 3 * marker_idx + 3] = marker_global
+
+    columns = []
+    for name in marker_names:
+        columns.extend([f"{name}_x", f"{name}_y", f"{name}_z"])
+    df = pd.DataFrame(marker_positions, index=pd.Index(times, name="time"), columns=columns)
+    df.attrs["unmatched_coordinates"] = unmatched
+    return df
 
 
 def save_opensim_animation(
@@ -1018,6 +1127,414 @@ def save_animation_viewer(
 """
     html_path.write_text(html, encoding="utf-8", newline="\n")
     return html_path
+
+
+def _storage_for_visualizer(path: str | Path | None, *, max_columns: int = 14) -> dict[str, Any] | None:
+    if path is None:
+        return None
+    from .io.storage import read_storage
+
+    storage_path = Path(path).expanduser().resolve()
+    if not storage_path.is_file():
+        raise FileNotFoundError(f"Storage file not found: {storage_path}")
+    df = read_storage(storage_path)
+    if df.empty:
+        return {"path": str(storage_path), "columns": [], "time": [], "series": {}}
+    time_col = "time" if "time" in df.columns else df.columns[0]
+    time = pd.to_numeric(df[time_col], errors="coerce").to_numpy(dtype=float)
+    numeric_cols = []
+    for col in df.columns:
+        if col == time_col:
+            continue
+        values = pd.to_numeric(df[col], errors="coerce").to_numpy(dtype=float)
+        finite = values[np.isfinite(values)]
+        if len(finite) == 0:
+            continue
+        score = float(np.nanpercentile(np.abs(finite), 95))
+        numeric_cols.append((col, score, values))
+    numeric_cols.sort(key=lambda item: item[1], reverse=True)
+    selected = numeric_cols[:max_columns]
+    return {
+        "path": str(storage_path),
+        "columns": [name for name, _, _ in selected],
+        "time": np.round(time, 5).tolist(),
+        "series": {name: np.round(values, 6).tolist() for name, _, values in selected},
+    }
+
+
+def _marker_payload(marker_df: pd.DataFrame, *, max_frames: int) -> dict[str, Any]:
+    if marker_df.empty:
+        return {"names": [], "time": [], "frames": [], "segments": []}
+    marker_names = sorted({col[:-2] for col in marker_df.columns if col.endswith("_x")})
+    if not marker_names:
+        return {"names": [], "time": [], "frames": [], "segments": []}
+    sample = np.linspace(0, len(marker_df) - 1, min(max_frames, len(marker_df)), dtype=int)
+    sample = np.unique(sample)
+    sampled = marker_df.iloc[sample]
+    frames = []
+    for _, row in sampled.iterrows():
+        frame = []
+        for name in marker_names:
+            frame.append(
+                [
+                    float(row.get(f"{name}_x", np.nan)),
+                    float(row.get(f"{name}_y", np.nan)),
+                    float(row.get(f"{name}_z", np.nan)),
+                ]
+            )
+        frames.append(frame)
+    segments = _infer_marker_segments(marker_names)
+    return {
+        "names": marker_names,
+        "time": np.round(sampled.index.to_numpy(dtype=float), 5).tolist(),
+        "frames": frames,
+        "segments": segments,
+    }
+
+
+def _infer_marker_segments(marker_names: list[str]) -> list[list[int]]:
+    norm = {re.sub(r"[^a-z0-9]", "", name.lower()): i for i, name in enumerate(marker_names)}
+
+    def find(*needles: str) -> int | None:
+        for key, idx in norm.items():
+            if all(needle in key for needle in needles):
+                return idx
+        return None
+
+    pairs = [
+        (find("pelvis"), find("torso")),
+        (find("hip", "r"), find("knee", "r")),
+        (find("knee", "r"), find("ankle", "r")),
+        (find("ankle", "r"), find("toe", "r")),
+        (find("hip", "l"), find("knee", "l")),
+        (find("knee", "l"), find("ankle", "l")),
+        (find("ankle", "l"), find("toe", "l")),
+        (find("shoulder", "r"), find("elbow", "r")),
+        (find("elbow", "r"), find("wrist", "r")),
+        (find("shoulder", "l"), find("elbow", "l")),
+        (find("elbow", "l"), find("wrist", "l")),
+        (find("shoulder", "r"), find("shoulder", "l")),
+        (find("hip", "r"), find("hip", "l")),
+        (find("neck"), find("head")),
+    ]
+    out = []
+    seen = set()
+    for a, b in pairs:
+        if a is None or b is None or a == b:
+            continue
+        key = tuple(sorted((a, b)))
+        if key not in seen:
+            out.append([a, b])
+            seen.add(key)
+    return out
+
+
+def _external_load_payload(path: str | Path | None, *, target_time: list[float]) -> dict[str, Any] | None:
+    if path is None:
+        return None
+    from .io.storage import read_storage
+
+    force_path = Path(path).expanduser().resolve()
+    if not force_path.is_file():
+        raise FileNotFoundError(f"External-load MOT file not found: {force_path}")
+    df = read_storage(force_path)
+    if df.empty or "time" not in df.columns:
+        return None
+    src_t = pd.to_numeric(df["time"], errors="coerce").to_numpy(dtype=float)
+    load_names = sorted(
+        {
+            col[:-3]
+            for col in df.columns
+            if col.endswith("_vx") and f"{col[:-3]}_px" in df.columns
+        }
+    )
+    frames = []
+    target = np.asarray(target_time, dtype=float)
+    for t in target:
+        frame = []
+        for name in load_names:
+            values = {}
+            for suffix in ("vx", "vy", "vz", "px", "py", "pz"):
+                col = f"{name}_{suffix}"
+                y = pd.to_numeric(df[col], errors="coerce").replace([np.inf, -np.inf], np.nan)
+                arr = y.fillna(0.0).to_numpy(dtype=float)
+                values[suffix] = float(np.interp(t, src_t, arr, left=0.0, right=0.0))
+            frame.append(
+                {
+                    "name": name,
+                    "point": [values["px"], values["py"], values["pz"]],
+                    "force": [values["vx"], values["vy"], values["vz"]],
+                }
+            )
+        frames.append(frame)
+    return {"path": str(force_path), "names": load_names, "frames": frames}
+
+
+def _write_visualizer_html(
+    html_path: Path,
+    *,
+    title: str,
+    payload: dict[str, Any],
+) -> Path:
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    payload_json = json.dumps(_json_safe(payload), allow_nan=False)
+    safe_title = escape(title)
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{safe_title}</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+  <style>
+    :root {{ --ink:#15201d; --muted:#63716e; --line:#d7dfdd; --panel:#fff; --bg:#f4f7f6; --accent:#0f766e; --force:#d65a31; }}
+    * {{ box-sizing:border-box; }}
+    body {{ margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--ink); }}
+    header {{ padding:18px 22px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.92); position:sticky; top:0; z-index:5; backdrop-filter:blur(12px); }}
+    h1 {{ margin:0; font-size:22px; letter-spacing:0; }}
+    .sub {{ color:var(--muted); margin-top:4px; font-size:13px; }}
+    main {{ display:grid; grid-template-columns:minmax(420px, 1.25fr) minmax(360px, .75fr); gap:14px; padding:14px; }}
+    section {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }}
+    .panel-title {{ padding:10px 12px; border-bottom:1px solid var(--line); font-weight:750; font-size:13px; display:flex; justify-content:space-between; gap:10px; align-items:center; }}
+    #scene {{ height:620px; }}
+    #glbPanel {{ display:none; height:620px; }}
+    model-viewer {{ width:100%; height:100%; background:#f8faf9; }}
+    .controls {{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-top:1px solid var(--line); background:#fbfcfc; }}
+    button, select {{ border:1px solid var(--line); background:white; border-radius:6px; padding:7px 10px; font:inherit; }}
+    button {{ cursor:pointer; font-weight:700; color:var(--accent); }}
+    input[type=range] {{ flex:1; accent-color:var(--accent); }}
+    .stack {{ display:grid; gap:14px; }}
+    .plot {{ height:265px; }}
+    .stats {{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:10px; }}
+    .stat {{ border:1px solid var(--line); border-radius:8px; padding:9px; background:#fbfcfc; }}
+    .stat b {{ display:block; font-size:18px; }}
+    .stat span {{ color:var(--muted); font-size:12px; }}
+    .tabs {{ display:flex; gap:6px; padding:8px; border-bottom:1px solid var(--line); background:#fbfcfc; }}
+    .tab.active {{ background:var(--accent); color:white; border-color:var(--accent); }}
+    @media (max-width: 980px) {{ main {{ grid-template-columns:1fr; }} #scene, #glbPanel {{ height:520px; }} }}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{safe_title}</h1>
+    <div class="sub">Synchronized 3D markers, external-force arrows, IK coordinates, and inverse-dynamics traces.</div>
+  </header>
+  <main>
+    <section>
+      <div class="tabs">
+        <button class="tab active" data-view="plotly">3D markers + forces</button>
+        <button class="tab" data-view="glb" id="glbTab">GLB model</button>
+      </div>
+      <div id="scene"></div>
+      <div id="glbPanel"><model-viewer id="glbViewer" camera-controls autoplay shadow-intensity="0.4" exposure="1.0"></model-viewer></div>
+      <div class="controls">
+        <button id="play">Play</button>
+        <input id="scrub" type="range" min="0" max="0" value="0">
+        <span id="time">0.000 s</span>
+      </div>
+    </section>
+    <div class="stack">
+      <section>
+        <div class="panel-title">Run Summary</div>
+        <div class="stats" id="stats"></div>
+      </section>
+      <section>
+        <div class="panel-title">IK Coordinates <select id="ikSelect"></select></div>
+        <div id="ikPlot" class="plot"></div>
+      </section>
+      <section>
+        <div class="panel-title">Inverse Dynamics <select id="idSelect"></select></div>
+        <div id="idPlot" class="plot"></div>
+      </section>
+    </div>
+  </main>
+  <script id="payload" type="application/json">{payload_json}</script>
+  <script>
+    const data = JSON.parse(document.getElementById('payload').textContent);
+    const marker = data.markers || {{names:[], time:[], frames:[], segments:[]}};
+    const force = data.forces || {{names:[], frames:[]}};
+    const scrub = document.getElementById('scrub');
+    const timeLabel = document.getElementById('time');
+    const playBtn = document.getElementById('play');
+    let idx = 0, timer = null;
+    scrub.max = Math.max(0, marker.frames.length - 1);
+
+    document.getElementById('stats').innerHTML = [
+      ['Frames', marker.frames.length],
+      ['Markers', marker.names.length],
+      ['Forces', (force.names || []).length],
+      ['IK traces', data.ik?.columns?.length || 0],
+      ['ID traces', data.id?.columns?.length || 0],
+      ['Duration', marker.time.length ? (marker.time[marker.time.length-1]-marker.time[0]).toFixed(3)+' s' : '0 s']
+    ].map(([k,v]) => `<div class="stat"><b>${{v}}</b><span>${{k}}</span></div>`).join('');
+
+    function frameArrays(i) {{
+      const f = marker.frames[i] || [];
+      return {{x:f.map(p=>p[0]), y:f.map(p=>p[1]), z:f.map(p=>p[2])}};
+    }}
+    function segmentArrays(i) {{
+      const f = marker.frames[i] || [];
+      const xs=[], ys=[], zs=[];
+      for (const [a,b] of marker.segments || []) {{
+        if (!f[a] || !f[b]) continue;
+        xs.push(f[a][0], f[b][0], null); ys.push(f[a][1], f[b][1], null); zs.push(f[a][2], f[b][2], null);
+      }}
+      return {{x:xs,y:ys,z:zs}};
+    }}
+    function forceArrays(i) {{
+      const frames = force.frames || [];
+      const loads = frames[i] || [];
+      let maxMag = 0;
+      for (const l of loads) maxMag = Math.max(maxMag, Math.hypot(...l.force));
+      const scale = maxMag > 0 ? (data.force_scale || 0.35) / maxMag : 1;
+      const xs=[], ys=[], zs=[], text=[];
+      for (const l of loads) {{
+        const p=l.point, v=l.force.map(x=>x*scale);
+        xs.push(p[0], p[0]+v[0], null); ys.push(p[1], p[1]+v[1], null); zs.push(p[2], p[2]+v[2], null);
+        text.push(l.name, l.name, '');
+      }}
+      return {{x:xs,y:ys,z:zs,text}};
+    }}
+    const p0 = frameArrays(0), s0 = segmentArrays(0), f0 = forceArrays(0);
+    Plotly.newPlot('scene', [
+      {{type:'scatter3d', mode:'markers', name:'markers', x:p0.x, y:p0.y, z:p0.z, text:marker.names, hoverinfo:'text', marker:{{size:4,color:'#0f766e'}}}},
+      {{type:'scatter3d', mode:'lines', name:'skeleton', x:s0.x, y:s0.y, z:s0.z, line:{{width:5,color:'#24302d'}}, hoverinfo:'skip'}},
+      {{type:'scatter3d', mode:'lines+markers', name:'external forces', x:f0.x, y:f0.y, z:f0.z, text:f0.text, line:{{width:8,color:'#d65a31'}}, marker:{{size:3,color:'#d65a31'}}}}
+    ], {{
+      margin:{{l:0,r:0,b:0,t:0}},
+      scene:{{aspectmode:'data', xaxis:{{title:'X'}}, yaxis:{{title:'Y'}}, zaxis:{{title:'Z'}}}},
+      legend:{{orientation:'h', x:0.02, y:0.98}}
+    }}, {{responsive:true}});
+
+    function updateFrame(i) {{
+      idx = Math.max(0, Math.min(marker.frames.length - 1, i));
+      const p = frameArrays(idx), s = segmentArrays(idx), f = forceArrays(idx);
+      Plotly.restyle('scene', {{x:[p.x], y:[p.y], z:[p.z]}}, [0]);
+      Plotly.restyle('scene', {{x:[s.x], y:[s.y], z:[s.z]}}, [1]);
+      Plotly.restyle('scene', {{x:[f.x], y:[f.y], z:[f.z], text:[f.text]}}, [2]);
+      scrub.value = idx;
+      timeLabel.textContent = (marker.time[idx] || 0).toFixed(3) + ' s';
+    }}
+    scrub.addEventListener('input', e => updateFrame(Number(e.target.value)));
+    playBtn.addEventListener('click', () => {{
+      if (timer) {{ clearInterval(timer); timer=null; playBtn.textContent='Play'; return; }}
+      playBtn.textContent='Pause';
+      timer = setInterval(() => {{ updateFrame((idx + 1) % marker.frames.length); }}, 45);
+    }});
+
+    function makeSeriesPlot(div, store, selectId, color) {{
+      const select = document.getElementById(selectId);
+      const cols = store?.columns || [];
+      select.innerHTML = cols.map(c => `<option value="${{c}}">${{c}}</option>`).join('');
+      function draw() {{
+        const col = select.value || cols[0];
+        const y = store?.series?.[col] || [];
+        Plotly.newPlot(div, [{{type:'scatter', mode:'lines', x:store?.time || [], y, line:{{color, width:2}}, name:col}}], {{
+          margin:{{l:44,r:12,b:34,t:8}}, xaxis:{{title:'time (s)'}}, yaxis:{{title:col}}, paper_bgcolor:'white', plot_bgcolor:'white'
+        }}, {{responsive:true}});
+      }}
+      select.addEventListener('change', draw); draw();
+    }}
+    makeSeriesPlot('ikPlot', data.ik, 'ikSelect', '#0f766e');
+    makeSeriesPlot('idPlot', data.id, 'idSelect', '#d65a31');
+
+    const glbTab = document.getElementById('glbTab');
+    if (data.glb_path) {{
+      document.getElementById('glbViewer').src = data.glb_path;
+    }} else {{
+      glbTab.disabled = true; glbTab.textContent = 'GLB model unavailable';
+    }}
+    document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {{
+      if (btn.disabled) return;
+      document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const glb = btn.dataset.view === 'glb';
+      document.getElementById('scene').style.display = glb ? 'none' : 'block';
+      document.getElementById('glbPanel').style.display = glb ? 'block' : 'none';
+    }}));
+  </script>
+</body>
+</html>
+"""
+    html_path.write_text(html, encoding="utf-8", newline="\n")
+    return html_path
+
+
+def _json_safe(value):
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, np.ndarray):
+        return _json_safe(value.tolist())
+    if isinstance(value, (np.floating, float)):
+        number = float(value)
+        return number if math.isfinite(number) else None
+    if isinstance(value, (np.integer, int)):
+        return int(value)
+    return value
+
+
+def save_opensim_visualizer(
+    html_path: str | Path,
+    *,
+    osim_path: str | Path | None = None,
+    ik_path: str | Path | None = None,
+    id_path: str | Path | None = None,
+    external_loads_path: str | Path | None = None,
+    glb_path: str | Path | None = None,
+    marker_dataframe: pd.DataFrame | None = None,
+    title: str = "monomech IK and ID visualizer",
+    max_frames: int = 240,
+    marker_stride: int = 1,
+) -> OpenSimVisualizerResult:
+    """Write a notebook-ready HTML dashboard for IK, ID, forces, and 3D motion."""
+
+    html_path = Path(html_path).expanduser().resolve()
+    if marker_dataframe is None:
+        if osim_path is None or ik_path is None:
+            raise ValueError("Provide marker_dataframe or both osim_path and ik_path.")
+        marker_dataframe = extract_opensim_marker_positions(
+            osim_path=osim_path,
+            mot_path=ik_path,
+            stride=marker_stride,
+        )
+    markers = _marker_payload(marker_dataframe, max_frames=max_frames)
+    forces = _external_load_payload(external_loads_path, target_time=markers["time"])
+
+    glb_ref = None
+    if glb_path is not None:
+        glb = Path(glb_path).expanduser().resolve()
+        if glb.is_file():
+            try:
+                glb_ref = glb.relative_to(html_path.parent).as_posix()
+            except ValueError:
+                glb_ref = glb.as_uri()
+
+    payload = {
+        "title": title,
+        "markers": markers,
+        "forces": forces,
+        "ik": _storage_for_visualizer(ik_path),
+        "id": _storage_for_visualizer(id_path),
+        "glb_path": glb_ref,
+        "force_scale": 0.35,
+    }
+    _write_visualizer_html(html_path, title=title, payload=payload)
+    metadata = {
+        "html_path": str(html_path),
+        "glb_path": glb_ref,
+        "marker_frames": len(markers["frames"]),
+        "marker_count": len(markers["names"]),
+        "force_count": 0 if forces is None else len(forces["names"]),
+        "ik_path": None if ik_path is None else str(Path(ik_path).expanduser().resolve()),
+        "id_path": None if id_path is None else str(Path(id_path).expanduser().resolve()),
+        "external_loads_path": None
+        if external_loads_path is None
+        else str(Path(external_loads_path).expanduser().resolve()),
+    }
+    return OpenSimVisualizerResult(html_path=html_path, metadata=metadata)
 
 
 def show_ik_animation(html_path: str | Path, glb_path: str | Path) -> Path:

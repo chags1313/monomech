@@ -2,9 +2,12 @@
 
 from .animation import (
     OpenSimAnimationResult,
+    OpenSimVisualizerResult,
+    extract_opensim_marker_positions,
     save_animation_viewer,
     save_ik_animation,
     save_opensim_animation,
+    save_opensim_visualizer,
     show_ik_animation,
 )
 from .config import (
@@ -41,7 +44,10 @@ __all__ = [
     "ExternalLoadsSpec",
     "external",
     "OpenSimAnimationResult",
+    "OpenSimVisualizerResult",
+    "extract_opensim_marker_positions",
     "save_opensim_animation",
+    "save_opensim_visualizer",
     "save_ik_animation",
     "save_animation_viewer",
     "show_ik_animation",

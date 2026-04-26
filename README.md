@@ -123,6 +123,21 @@ animation = mm.save_opensim_animation(
 print(animation.glb_path)
 ```
 
+Create a notebook-friendly dashboard with 3D motion, force arrows, IK plots, and ID plots:
+
+```python
+viewer = mm.save_opensim_visualizer(
+    "outputs/subject01/animation/ik_id_viewer.html",
+    osim_path=scale.scaled_model_path,
+    ik_path=ik.path,
+    id_path=id_result.path,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    glb_path=animation.glb_path,
+)
+
+viewer
+```
+
 For measured force plates, build an external-load spec from your force table:
 
 ```python

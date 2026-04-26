@@ -128,6 +128,52 @@ print(viewer)
 
 Open `viewer.html` in a browser to inspect the animation.
 
+## Notebook IK/ID Dashboard
+
+For notebooks and review sessions, use `save_opensim_visualizer()`. It creates a richer HTML dashboard with:
+
+- a 3D marker/skeleton animation
+- external-force arrows from the generated external-load `.mot`
+- synchronized IK coordinate plots
+- inverse-dynamics trace plots
+- an optional GLB model tab when a GLB file is available
+
+```python
+viewer = mm.save_opensim_visualizer(
+    "outputs/subject01/animation/ik_id_viewer.html",
+    osim_path=scale.scaled_model_path,
+    ik_path=ik.path,
+    id_path=id_result.path,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    glb_path=animation.glb_path,
+    title="subject01 IK + ID",
+)
+
+viewer
+```
+
+In Jupyter, the returned object displays as an embedded iframe. In a script, open `viewer.html` in a browser.
+
+You can also build the dashboard without mesh geometry:
+
+```python
+marker_df = mm.extract_opensim_marker_positions(
+    osim_path=scale.scaled_model_path,
+    mot_path=ik.path,
+    stride=2,
+)
+
+viewer = mm.save_opensim_visualizer(
+    "outputs/subject01/animation/marker_force_viewer.html",
+    marker_dataframe=marker_df,
+    ik_path=ik.path,
+    id_path=id_result.path,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+)
+```
+
+[Open a small visualizer demo](../assets/visualizer-demo.html){ .md-button }
+
 ## File Size And Speed
 
 Use these knobs when the GLB is too large or export takes too long:

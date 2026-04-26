@@ -17,4 +17,5 @@ def test_native_dependencies_are_optional():
     assert "mediapipe" not in dependencies
     assert "opencv-python-headless" not in dependencies
     assert "pyopensim" not in dependencies
+    assert "numpy>=1.26,<2" in dependencies
     assert {"pose", "opensim", "all"} <= set(extras)

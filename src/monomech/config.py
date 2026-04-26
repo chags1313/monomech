@@ -61,6 +61,7 @@ class OpenSimScaleConfig:
     preserve_mass_distribution: bool = False
     output_prefix: str | None = None
     sanitize_marker_data: bool = True
+    quiet: bool = True
 
 
 @dataclass(slots=True)
@@ -69,6 +70,7 @@ class OpenSimIKConfig:
     accuracy: float = 1e-5
     output_prefix: str | None = None
     sanitize_marker_data: bool = True
+    quiet: bool = True
 
 
 @dataclass(slots=True)
@@ -77,3 +79,4 @@ class OpenSimIDConfig:
     output_prefix: str | None = None
     time_window: tuple[float, float] | str = "auto"
     sanitize_coordinates: bool = True
+    quiet: bool = True

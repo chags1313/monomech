@@ -5,6 +5,7 @@ from importlib.resources import as_file, files
 from pathlib import Path
 import shutil
 import tempfile
+import xml.etree.ElementTree as ET
 from typing import Iterator
 
 
@@ -40,6 +41,7 @@ def get_builtin_osim_model(
     name: str = "pose",
     *,
     extract_dir: str | Path | None = None,
+    include_geometry: bool = False,
 ) -> Path:
     """
     Return a stable filesystem path to a packaged OpenSim model.
@@ -55,14 +57,37 @@ def get_builtin_osim_model(
         extract_dir = Path(extract_dir)
 
     extract_dir.mkdir(parents=True, exist_ok=True)
-    out_path = extract_dir / filename
+    resolved_filename = filename if include_geometry else f"{Path(filename).stem}_nogeometry{Path(filename).suffix}"
+    out_path = extract_dir / resolved_filename
 
     if not out_path.exists():
         resource = files("monomech.data") / filename
         with as_file(resource) as src:
             shutil.copy2(src, out_path)
+        if not include_geometry:
+            _strip_opensim_mesh_geometry(out_path)
 
     return out_path
+
+
+def _strip_opensim_mesh_geometry(path: str | Path) -> None:
+    """
+    Remove mesh display geometry from a copied OpenSim model.
+
+    The packaged model can run without visualization meshes, and removing the
+    missing mesh references avoids pages of OpenSim warnings during scale/IK/ID.
+    """
+    path = Path(path)
+    tree = ET.parse(path)
+    root = tree.getroot()
+    removed = 0
+    for parent in root.iter():
+        for child in list(parent):
+            if child.tag == "Mesh":
+                parent.remove(child)
+                removed += 1
+    if removed:
+        tree.write(path, encoding="utf-8", xml_declaration=True)
 
 
 @contextmanager

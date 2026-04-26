@@ -20,6 +20,12 @@ model_path = mm.get_builtin_osim_model("pose")
 print(mm.list_builtin_osim_models())
 ```
 
+By default, bundled models are copied without mesh display geometry. This avoids missing `.vtp` visualization warnings during command-line runs. If you want the original model references for a GUI workflow, use:
+
+```python
+model_path = mm.get_builtin_osim_model("pose", include_geometry=True)
+```
+
 ## Scale
 
 ```python
@@ -55,6 +61,7 @@ ik = trial.run_opensim_ik(
 
 print(ik.path)
 display(ik.to_dataframe().head())
+print(ik.metadata["marker_error_summary"])
 ```
 
 Add marker weights when some markers should matter more:
@@ -123,7 +130,30 @@ Inspect preflight metadata:
 
 ```python
 print(ik.metadata["preflight"])
+print(ik.metadata["marker_error_summary"])
 print(id_result.metadata["coordinate_preflight"])
+```
+
+## Quiet Logs
+
+OpenSim can print a line per frame during IK. `monomech` runs OpenSim tools in quiet mode by default and writes stage logs next to the outputs.
+
+```python
+print(scale.metadata["log_path"])
+print(ik.metadata["log_path"])
+print(id_result.metadata["log_path"])
+```
+
+Set `quiet=False` when you want OpenSim output in the console:
+
+```python
+from monomech import OpenSimIKConfig
+
+ik = trial.run_opensim_ik(
+    model_path=scale.scaled_model_path,
+    trc_path=trc_path,
+    config=OpenSimIKConfig(quiet=False),
+)
 ```
 
 Use strict mode when you want a failure instead of automatic interpolation:

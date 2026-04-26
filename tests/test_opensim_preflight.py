@@ -9,6 +9,7 @@ from monomech.io.trc import load_trc, write_trc
 from monomech.opensim_api import (
     _prepare_storage_for_opensim,
     _prepare_trc_for_opensim,
+    _summarize_ik_marker_errors,
     _write_external_loads_data,
 )
 
@@ -110,3 +111,30 @@ def test_external_load_resampling_removes_nans(tmp_path: Path):
     table = read_storage(mot_path)
     numeric = table.drop(columns=["time"]).to_numpy(dtype=float)
     assert np.isfinite(numeric).all()
+
+
+def test_summarize_ik_marker_errors(tmp_path: Path):
+    marker_errors = tmp_path / "_ik_marker_errors.sto"
+    marker_errors.write_text(
+        "\n".join(
+            [
+                "Model Marker Errors from IK",
+                "version=1",
+                "nRows=2",
+                "nColumns=4",
+                "inDegrees=no",
+                "endheader",
+                "time\ttotal_squared_error\tmarker_error_RMS\tmarker_error_max",
+                "0.0\t0.25\t0.10\t0.30",
+                "0.5\t0.09\t0.20\t0.25",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    summary = _summarize_ik_marker_errors(tmp_path)
+
+    assert summary is not None
+    assert summary["rows"] == 2
+    assert summary["marker_error_RMS"]["max"] == 0.2
+    assert summary["worst_rms_time"] == 0.5

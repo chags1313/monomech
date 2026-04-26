@@ -92,6 +92,7 @@ The `examples/` folder includes ready-to-edit notebooks:
 - [`marker_trc_cleanup.ipynb`](examples/marker_trc_cleanup.ipynb) for TRC inspection, cleaning, and export.
 - [`opensim_scale_ik_template.ipynb`](examples/opensim_scale_ik_template.ipynb) for OpenSim scale and inverse kinematics setup.
 - [`video_to_inverse_dynamics_pipeline.ipynb`](examples/video_to_inverse_dynamics_pipeline.ipynb) for video to inverse dynamics with estimated external loads.
+- [`run_video_smoke.py`](examples/run_video_smoke.py) for repeatable command-line smoke tests.
 
 Each notebook keeps paths at the top and separates inspection, export, and downstream steps.
 
@@ -144,6 +145,14 @@ python -m pytest tests
 mkdocs build --strict
 python -m build
 ```
+
+Run a real video smoke test:
+
+```bash
+python examples/run_video_smoke.py "path/to/video.mp4" --output-dir outputs/smoke
+```
+
+Add `--opensim` when OpenSim-compatible bindings are installed.
 
 ## Publishing
 

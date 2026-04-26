@@ -238,6 +238,7 @@ Use a stable quiet window for scaling when the full trial contains extra movemen
 | Symptom | Likely fix |
 | --- | --- |
 | `import monomech` fails after a base install | Upgrade to `monomech>=0.15.1`; optional native dependencies should not be required for import. |
+| Pandas prints `pyarrow` or NumPy ABI tracebacks | Use a clean virtual environment and reinstall. `monomech` pins `numpy<2` to avoid older binary-extension conflicts. |
 | Video pose methods are missing dependencies | Install `python -m pip install "monomech[pose]"`. |
 | Notebook plotting fails | Install `python -m pip install "monomech[notebook]"`. |
 | OpenSim import fails | Use a conda OpenSim install or install `python -m pip install "monomech[opensim]"`. |

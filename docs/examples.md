@@ -10,6 +10,7 @@ The example notebooks are designed to be read top to bottom. Each notebook keeps
 | [`marker_trc_cleanup.ipynb`](https://github.com/chags1313/monomech/blob/main/examples/marker_trc_cleanup.ipynb) | You already have a TRC file and want a cleaned version. | marker summary, cleaned TRC |
 | [`opensim_scale_ik_template.ipynb`](https://github.com/chags1313/monomech/blob/main/examples/opensim_scale_ik_template.ipynb) | You have a TRC and want to set up OpenSim scale and IK. | scale setup, scaled model, IK motion |
 | [`video_to_inverse_dynamics_pipeline.ipynb`](https://github.com/chags1313/monomech/blob/main/examples/video_to_inverse_dynamics_pipeline.ipynb) | You want a full video -> TRC -> scale -> IK -> external loads -> ID walkthrough. | pose outputs, OpenSim files, estimated loads, ID storage |
+| [`run_video_smoke.py`](https://github.com/chags1313/monomech/blob/main/examples/run_video_smoke.py) | You want a repeatable command-line test for a real video. | JSON report, CSV, TRC, optional OpenSim outputs |
 
 ## Suggested Order
 
@@ -71,6 +72,18 @@ id_result = trial.run_opensim_id(
 )
 
 print(id_result.path)
+```
+
+## Command-Line Smoke Test
+
+```bash
+python examples/run_video_smoke.py "data/subject01.mp4" --output-dir outputs/subject01_smoke
+```
+
+Run OpenSim too when the bindings are installed:
+
+```bash
+python examples/run_video_smoke.py "data/subject01.mp4" --output-dir outputs/subject01_smoke --opensim
 ```
 
 ## Minimal Video Example

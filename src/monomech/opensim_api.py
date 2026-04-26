@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import xml.etree.ElementTree as ET
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 import importlib
 
@@ -15,6 +16,40 @@ from .opensim_runtime import require_opensim
 from .results import OpenSimScaleResult, StorageResult
 from .utils import ensure_dir
 from .io.trc import load_trc, write_trc
+
+
+@contextmanager
+def _opensim_logging(osim, *, quiet: bool, log_path: Path):
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    previous_level = None
+    logger = getattr(osim, "Logger", None)
+    if logger is not None and hasattr(logger, "setLevelString"):
+        for getter in ("getLevelString", "get_level_string"):
+            if hasattr(logger, getter):
+                try:
+                    previous_level = getattr(logger, getter)()
+                    break
+                except Exception:
+                    pass
+        if quiet:
+            try:
+                logger.setLevelString("Error")
+            except Exception:
+                try:
+                    logger.setLevelString("error")
+                except Exception:
+                    pass
+
+    with log_path.open("a", encoding="utf-8", newline="\n") as log_file:
+        with redirect_stdout(log_file), redirect_stderr(log_file):
+            try:
+                yield
+            finally:
+                if previous_level is not None and logger is not None and hasattr(logger, "setLevelString"):
+                    try:
+                        logger.setLevelString(previous_level)
+                    except Exception:
+                        pass
 
 
 def _finite_interp(values: np.ndarray, time: np.ndarray) -> tuple[np.ndarray, dict]:
@@ -135,6 +170,36 @@ def _write_storage_from_dataframe(path: Path, df: pd.DataFrame, *, name: str) ->
         f.write("\t".join(df.columns) + "\n")
         df.to_csv(f, sep="\t", index=False, header=False, float_format="%.8f")
     return path
+
+
+def _summarize_ik_marker_errors(output_dir: Path) -> dict | None:
+    candidates = sorted(output_dir.glob("*marker_errors.sto"))
+    if not candidates:
+        return None
+
+    path = candidates[0]
+    df = read_storage(path)
+    if df.empty:
+        return {"path": str(path), "rows": 0}
+
+    summary: dict[str, object] = {"path": str(path), "rows": int(len(df))}
+    for col in ("total_squared_error", "marker_error_RMS", "marker_error_max"):
+        if col not in df.columns:
+            continue
+        values = pd.to_numeric(df[col], errors="coerce").to_numpy(dtype=float)
+        finite = values[np.isfinite(values)]
+        if len(finite) == 0:
+            continue
+        summary[col] = {
+            "mean": float(np.mean(finite)),
+            "median": float(np.median(finite)),
+            "max": float(np.max(finite)),
+        }
+    if "marker_error_RMS" in df.columns:
+        idx = pd.to_numeric(df["marker_error_RMS"], errors="coerce").idxmax()
+        if np.isfinite(idx):
+            summary["worst_rms_time"] = float(df.loc[idx, "time"]) if "time" in df.columns else None
+    return summary
 
 
 def _prepare_storage_for_opensim(
@@ -525,17 +590,22 @@ def run_scale(
             pass
 
     scale_tool.printToXML(str(setup_xml_path))
-    scale_tool.run()
+    log_path = (output_dir / f"{prefix}_scale.log").resolve()
+    with _opensim_logging(osim, quiet=bool(config.quiet), log_path=log_path):
+        scale_tool.run()
 
     return OpenSimScaleResult(
         scaled_model_path=scaled_model_path,
         setup_xml_path=setup_xml_path,
+        log_path=log_path,
         metadata={
             "trc_path": str(trc_path),
             "model_path": str(model_path),
             "time_range": [t0, t1],
             "output_dir": str(output_dir),
             "preflight": preflight,
+            "log_path": str(log_path),
+            "quiet": bool(config.quiet),
         },
     )
 
@@ -640,7 +710,10 @@ def run_ik(
         )
 
     ik.printToXML(str(setup_xml_path))
-    ik.run()
+    log_path = (output_dir / f"{prefix}_ik.log").resolve()
+    with _opensim_logging(osim, quiet=bool(config.quiet), log_path=log_path):
+        ik.run()
+    marker_error_summary = _summarize_ik_marker_errors(output_dir)
 
     return StorageResult(
         path=mot_path,
@@ -650,6 +723,9 @@ def run_ik(
             "trc_path": str(trc_path),
             "time_range": [start_time, end_time],
             "preflight": preflight,
+            "marker_error_summary": marker_error_summary,
+            "log_path": str(log_path),
+            "quiet": bool(config.quiet),
         },
     )
 
@@ -745,7 +821,9 @@ def run_id(
             )
 
     tool.printToXML(str(setup_xml_path))
-    ok = tool.run()
+    log_path = (output_dir / f"{prefix}_id.log").resolve()
+    with _opensim_logging(osim, quiet=bool(config.quiet), log_path=log_path):
+        ok = tool.run()
 
     # Expected location first.
     final_sto = sto_path
@@ -779,6 +857,8 @@ def run_id(
             "external_loads_mot_path": None if external_mot is None else str(external_mot),
             "run_return": ok,
             "coordinate_preflight": coordinate_preflight,
+            "log_path": str(log_path),
+            "quiet": bool(config.quiet),
         },
     )
 

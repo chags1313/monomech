@@ -203,6 +203,8 @@ class _ExternalFactory:
         sides: tuple[str, ...] = ("left", "right"),
         body_mass_kg: float = 75.0,
         name: str = "estimated_grf",
+        opensim_axes: bool = True,
+        ground_y: bool = True,
     ) -> list[ExternalLoadsSpec]:
         time = np.asarray(pose3d.time, dtype=float)
         g = 9.81
@@ -220,12 +222,24 @@ class _ExternalFactory:
             raise ValueError("pose3d must provide data or array")
 
         data = np.asarray(data, dtype=float)
+        if opensim_axes:
+            remapped = np.empty_like(data)
+            remapped[:, :, 0] = data[:, :, 2]
+            remapped[:, :, 1] = data[:, :, 1]
+            remapped[:, :, 2] = data[:, :, 0]
+            data = remapped
+        if ground_y and data.shape[2] >= 2:
+            floor = np.nanmin(data[:, :, 1])
+            if np.isfinite(floor):
+                data[:, :, 1] -= floor
 
         foot_map = {
             "left": ["left_heel", "left_foot_index", "left_ankle"],
             "right": ["right_heel", "right_foot_index", "right_ankle"],
         }
 
+        side_points: dict[str, np.ndarray] = {}
+        side_heights: dict[str, np.ndarray] = {}
         loads: list[ExternalLoadsSpec] = []
 
         for side in sides:
@@ -234,15 +248,35 @@ class _ExternalFactory:
                 continue
 
             idx = [landmark_names.index(m) for m in markers]
-            y = np.nanmean(data[:, idx, 1], axis=1)
-            y0 = np.nanpercentile(y[np.isfinite(y)], 10) if np.isfinite(y).any() else 0.0
-            contact = np.where(np.isfinite(y), (y - y0) < 0.03, False)
+            side_points[side] = np.nanmean(data[:, idx, :3], axis=1)
+            side_heights[side] = np.nanmean(data[:, idx, 1], axis=1)
 
-            support = np.where(contact, body_mass_kg * g / max(1, len(sides)), 0.0)
-            point = np.nanmean(data[:, idx, :3], axis=1)
-            force = np.column_stack(
-                [np.zeros_like(support), support, np.zeros_like(support)]
+        if not side_points:
+            return loads
+
+        finite_heights = np.concatenate(
+            [height[np.isfinite(height)] for height in side_heights.values()]
+        )
+        floor_height = float(np.nanpercentile(finite_heights, 5)) if finite_heights.size else 0.0
+        height_scale = 0.08
+        weights = {}
+        for side, height in side_heights.items():
+            height_above_floor = np.clip(height - floor_height, 0.0, None)
+            weight = np.exp(-height_above_floor / height_scale)
+            weight[~np.isfinite(weight)] = 0.0
+            weights[side] = weight
+
+        total_weight = np.sum(np.vstack(list(weights.values())), axis=0)
+        valid_support = total_weight > 1e-9
+
+        for side, point in side_points.items():
+            support = np.zeros_like(time, dtype=float)
+            support[valid_support] = (
+                weights[side][valid_support] / total_weight[valid_support] * body_mass_kg * g
             )
+            if not np.all(valid_support):
+                support[~valid_support] = body_mass_kg * g / max(1, len(side_points))
+            force = np.column_stack([np.zeros_like(support), support, np.zeros_like(support)])
 
             spec = self.from_timeseries(
                 time=time,
@@ -255,6 +289,18 @@ class _ExternalFactory:
             )
             spec.is_estimated = True
             spec.source = method
+            spec.metadata = {
+                "method": method,
+                "body_mass_kg": float(body_mass_kg),
+                "floor_height": floor_height,
+                "height_scale_m": height_scale,
+                "opensim_axes": bool(opensim_axes),
+                "ground_y": bool(ground_y),
+                "note": (
+                    "Estimated GRF is a visualization and inverse-dynamics fallback, "
+                    "not measured force-plate data."
+                ),
+            }
             loads.append(spec)
 
         return loads

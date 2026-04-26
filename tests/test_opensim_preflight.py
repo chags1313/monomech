@@ -9,6 +9,7 @@ from monomech.io.trc import load_trc, write_trc
 from monomech.opensim_api import (
     _prepare_storage_for_opensim,
     _prepare_trc_for_opensim,
+    _read_storage_time_vector,
     _summarize_ik_marker_errors,
     _write_external_loads_data,
 )
@@ -111,6 +112,52 @@ def test_external_load_resampling_removes_nans(tmp_path: Path):
     table = read_storage(mot_path)
     numeric = table.drop(columns=["time"]).to_numpy(dtype=float)
     assert np.isfinite(numeric).all()
+
+
+def test_read_storage_time_vector_handles_padded_opensim_rows(tmp_path: Path):
+    storage_path = tmp_path / "ik.mot"
+    storage_path.write_text(
+        "\n".join(
+            [
+                "Coordinates",
+                "version=1",
+                "nRows=2",
+                "nColumns=3",
+                "inDegrees=yes",
+                "endheader",
+                "time\tpelvis_tilt\tpelvis_tx",
+                "      0.00000000\t    189.89380616\t      2.05699634",
+                "      0.03372100\t    182.98767450\t      1.91619641",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    time = _read_storage_time_vector(storage_path)
+
+    assert np.allclose(time, [0.0, 0.033721])
+
+
+def test_estimated_grf_points_use_opensim_axes():
+    pose = type(
+        "Pose",
+        (),
+        {
+            "time": np.array([0.0, 0.5]),
+            "landmark_names": ["left_heel", "left_foot_index", "left_ankle"],
+            "data": np.array(
+                [
+                    [[1.0, 2.0, 3.0], [1.2, 2.1, 3.2], [1.1, 2.2, 3.1]],
+                    [[1.4, 2.4, 3.4], [1.6, 2.5, 3.6], [1.5, 2.6, 3.5]],
+                ]
+            ),
+        },
+    )()
+
+    loads = mm.external.estimate_grf(pose3d=pose, sides=("left",), body_mass_kg=75.0)
+
+    point = loads[0].data[["Px", "Py", "Pz"]].to_numpy(dtype=float)
+    assert np.allclose(point[0], [3.1, 0.1, 1.1])
 
 
 def test_summarize_ik_marker_errors(tmp_path: Path):

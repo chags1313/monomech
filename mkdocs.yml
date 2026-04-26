@@ -69,6 +69,7 @@ extra_css:
 
 nav:
   - Home: index.md
+  - Online visualizer: visualizer.md
   - Getting started: getting-started.md
   - Examples: examples.md
   - Modular stages:

@@ -140,7 +140,9 @@ viewer = mm.save_opensim_visualizer(
 viewer
 ```
 
-The dashboard is a standalone HTML file, so it works in notebooks, local browsers, and GitHub Pages. It also includes an **Upload GLB** control, which lets a reader drag in their own exported model without sending the file anywhere.
+The dashboard is a standalone HTML file, so it works in notebooks, local browsers, and GitHub Pages. When `glb_path` is provided, the GLB is embedded so the animated mesh loads immediately. It also includes an **Upload GLB** control, which lets a reader drag in their own exported model without sending the file anywhere.
+
+The GitHub Pages site includes an online GLB visualizer for quick review: [chags1313.github.io/monomech/visualizer/](https://chags1313.github.io/monomech/visualizer/).
 
 Geometry note: pass `geom_dir` to the real OpenSim `Geometry/` folder. If your model came from a macOS-created zip, avoid the `__MACOSX` folder because it usually contains only tiny `._*.vtp` metadata files, not usable meshes.
 
@@ -186,6 +188,7 @@ The `examples/` folder includes ready-to-edit notebooks:
 
 - [Getting started](https://chags1313.github.io/monomech/getting-started/)
 - [Example notebooks](https://chags1313.github.io/monomech/examples/)
+- [Online GLB visualizer](https://chags1313.github.io/monomech/visualizer/)
 - [External loads and forces](https://chags1313.github.io/monomech/stages/forces/)
 - [OpenSim scale, IK, and ID](https://chags1313.github.io/monomech/stages/opensim/)
 - [OpenSim animation export](https://chags1313.github.io/monomech/stages/animation/)
@@ -211,12 +214,14 @@ Add `--opensim` when OpenSim-compatible bindings are installed.
 
 ## Publishing
 
-GitHub Actions builds distributions on every push to `main`. PyPI publishing is triggered by version tags such as:
+GitHub Actions builds distributions on every push to `main`. PyPI publishing goes directly to PyPI through trusted publishing and is triggered by version tags such as:
 
 ```bash
-git tag v0.15.1
-git push origin v0.15.1
+git tag v0.15.4
+git push origin v0.15.4
 ```
+
+The publish workflow can also be run manually from GitHub Actions with the `publish` input set to `true`.
 
 ## License
 

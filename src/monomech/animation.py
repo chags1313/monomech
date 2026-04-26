@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import math
@@ -442,18 +443,62 @@ def _canonicalize_body_target(
 ):
     stem_lower = stem.lower()
     side = None
-    if "_r" in stem_lower or stem_lower.endswith("right"):
+    if re.search(r"(^|_)(r|right)(v|vs|s)?($|_)", stem_lower) or stem_lower.endswith("right"):
         side = "r"
-    elif "_l" in stem_lower or stem_lower.endswith("left") or stem_lower.startswith("l_"):
+    elif (
+        re.search(r"(^|_)(l|left)(v|vs|s)?($|_)", stem_lower)
+        or stem_lower.endswith("left")
+        or stem_lower.startswith("l_")
+    ):
         side = "l"
     suffix = f"_{side}" if side else ""
 
+    normalized = re.sub(r"(^|_)(r|l)(v|vs|s)($|_)", lambda m: f"{m.group(1)}{m.group(2)}{m.group(4)}", stem_lower)
+    normalized = normalized.replace("_s", "").replace("sm", "")
+
     if "foot" in stem_lower or "bofoot" in stem_lower:
-        for candidate in (f"foot{suffix}", f"calcn{suffix}", f"toes{suffix}", f"talus{suffix}"):
+        for candidate in (f"calcn{suffix}", f"toes{suffix}", f"talus{suffix}", f"foot{suffix}"):
             if candidate.lower() in name_to_body:
                 return name_to_body[candidate.lower()]
 
-    for root in ("patella", "fibula", "tibia", "femur", "talus"):
+    if "hat_skull" in stem_lower or "skull" in stem_lower or "jaw" in stem_lower:
+        if "head" in name_to_body:
+            return name_to_body["head"]
+    if "hat_ribs" in stem_lower or "scap" in stem_lower:
+        if "torso" in name_to_body:
+            return name_to_body["torso"]
+
+    hand_parts = (
+        "pisiform",
+        "lunate",
+        "scaphoid",
+        "triquetrum",
+        "hamate",
+        "capitate",
+        "trapezoid",
+        "trapezium",
+        "metacarpal",
+        "index_",
+        "middle_",
+        "ring_",
+        "little_",
+        "thumb_",
+    )
+    if any(part in stem_lower for part in hand_parts):
+        candidate = f"hand{suffix}"
+        if candidate.lower() in name_to_body:
+            return name_to_body[candidate.lower()]
+
+    for root in (
+        "patella",
+        "fibula",
+        "tibia",
+        "femur",
+        "talus",
+        "humerus",
+        "ulna",
+        "radius",
+    ):
         if root in stem_lower:
             candidate = f"{root}{suffix}"
             if candidate.lower() in name_to_body:
@@ -463,10 +508,18 @@ def _canonicalize_body_target(
         if candidate in stem_lower and candidate in name_to_body:
             return name_to_body[candidate]
 
+    for candidate in ("lumbar5", "lumbar4", "lumbar3", "lumbar2", "lumbar1"):
+        if candidate in stem_lower and candidate in name_to_body:
+            return name_to_body[candidate]
+    if "thoracic" in stem_lower and "torso" in name_to_body:
+        return name_to_body["torso"]
+
     matches = [
         (body_name, len(body_name))
         for body_name in body_names
         if body_name.lower() in stem_lower
+        or body_name.lower() in normalized
+        or normalized in body_name.lower()
     ]
     if matches:
         matches.sort(key=lambda item: -item[1])
@@ -620,12 +673,12 @@ def save_opensim_animation(
     stride: int = 1,
     thin_pos_tol: float | None = 1e-4,
     thin_rot_tol_deg: float | None = 0.05,
-    drop_static_nodes: bool = True,
+    drop_static_nodes: bool = False,
     decimate_target_reduction: float | None = None,
     decimate_error: float | None = None,
     decimate_preserve_topology: bool = False,
     enforce_quat_continuity: bool = True,
-    drop_origin_nodes: bool = True,
+    drop_origin_nodes: bool = False,
     origin_pos_tol: float = 1e-5,
     origin_rot_tol_deg: float | None = None,
     return_markers: bool = True,
@@ -1033,7 +1086,7 @@ def save_opensim_animation(
         "stride": stride,
         "time_range": [float(times[0]), float(times[-1])],
         "unmatched_coordinates": unmatched_coordinates,
-        "missing_geometry": missing_geometry,
+        "missing_geometry": sorted(set(missing_geometry)),
         "dropped_static_nodes": dropped_static_nodes,
         "dropped_origin_nodes": dropped_origin_nodes,
         "id_summary": id_summary,
@@ -1088,22 +1141,26 @@ def save_animation_viewer(
     glb_path: str | Path,
     *,
     title: str = "monomech OpenSim animation",
+    embed_glb: bool = True,
 ) -> Path:
     """Write a small Three.js HTML viewer for a GLB animation."""
 
     html_path = Path(html_path).expanduser().resolve()
     glb_path = Path(glb_path)
     html_path.parent.mkdir(parents=True, exist_ok=True)
-    glb_ref = _asset_reference(glb_path, html_path.parent)
+    glb_ref = _asset_reference(glb_path, html_path.parent, embed=embed_glb)
     payload = {"title": title, "glb_path": glb_ref}
     _write_simple_glb_viewer_html(html_path, title=title, payload=payload)
     return html_path
 
 
-def _asset_reference(path: Path, relative_to: Path) -> str:
+def _asset_reference(path: Path, relative_to: Path, *, embed: bool = False) -> str:
+    resolved = path.expanduser().resolve() if path.is_absolute() else (relative_to / path).resolve()
+    if embed and resolved.is_file() and resolved.suffix.lower() == ".glb":
+        encoded = base64.b64encode(resolved.read_bytes()).decode("ascii")
+        return f"data:model/gltf-binary;base64,{encoded}"
     ref = path.as_posix()
     if path.is_absolute():
-        resolved = path.expanduser().resolve()
         try:
             ref = resolved.relative_to(relative_to).as_posix()
         except ValueError:
@@ -1269,7 +1326,11 @@ def _write_simple_glb_viewer_html(html_path: Path, *, title: str, payload: dict[
     return html_path
 
 
-def _storage_for_visualizer(path: str | Path | None, *, max_columns: int = 14) -> dict[str, Any] | None:
+def _storage_for_visualizer(
+    path: str | Path | None,
+    *,
+    max_columns: int | None = None,
+) -> dict[str, Any] | None:
     if path is None:
         return None
     from .io.storage import read_storage
@@ -1279,7 +1340,7 @@ def _storage_for_visualizer(path: str | Path | None, *, max_columns: int = 14) -
         raise FileNotFoundError(f"Storage file not found: {storage_path}")
     df = read_storage(storage_path)
     if df.empty:
-        return {"path": str(storage_path), "columns": [], "time": [], "series": {}}
+        return {"path": storage_path.name, "columns": [], "time": [], "series": {}}
     time_col = "time" if "time" in df.columns else df.columns[0]
     time = pd.to_numeric(df[time_col], errors="coerce").to_numpy(dtype=float)
     numeric_cols = []
@@ -1293,9 +1354,9 @@ def _storage_for_visualizer(path: str | Path | None, *, max_columns: int = 14) -
         score = float(np.nanpercentile(np.abs(finite), 95))
         numeric_cols.append((col, score, values))
     numeric_cols.sort(key=lambda item: item[1], reverse=True)
-    selected = numeric_cols[:max_columns]
+    selected = numeric_cols if max_columns is None else numeric_cols[:max_columns]
     return {
-        "path": str(storage_path),
+        "path": storage_path.name,
         "columns": [name for name, _, _ in selected],
         "time": np.round(time, 5).tolist(),
         "series": {name: np.round(values, 6).tolist() for name, _, values in selected},
@@ -1333,28 +1394,74 @@ def _marker_payload(marker_df: pd.DataFrame, *, max_frames: int) -> dict[str, An
 
 
 def _infer_marker_segments(marker_names: list[str]) -> list[list[int]]:
-    norm = {re.sub(r"[^a-z0-9]", "", name.lower()): i for i, name in enumerate(marker_names)}
+    norm = {name: re.sub(r"[^a-z0-9_]", "_", name.lower()).strip("_") for name in marker_names}
+    index = {name: i for i, name in enumerate(marker_names)}
 
-    def find(*needles: str) -> int | None:
-        for key, idx in norm.items():
-            if all(needle in key for needle in needles):
-                return idx
+    def side_of(name: str) -> str | None:
+        tokens = {token for token in re.split(r"[_\W]+", norm[name]) if token}
+        compact = norm[name].replace("_", "")
+        if "right" in tokens or "r" in tokens or compact.startswith("right"):
+            return "right"
+        if "left" in tokens or "l" in tokens or compact.startswith("left"):
+            return "left"
         return None
 
+    def has_part(name: str, part: str) -> bool:
+        compact = norm[name].replace("_", "")
+        aliases = {
+            "foot": ("foot", "toe", "footindex", "bofoot", "calcn"),
+            "heel": ("heel", "calc"),
+            "pelvis": ("pelvis", "hip"),
+            "torso": ("torso", "spine", "sternum", "chest", "shoulder"),
+        }
+        return any(alias in compact for alias in aliases.get(part, (part,)))
+
+    def find(part: str, side: str | None = None, *, prefer: tuple[str, ...] = ()) -> int | None:
+        matches = [
+            name
+            for name in marker_names
+            if has_part(name, part) and (side is None or side_of(name) == side)
+        ]
+        if not matches:
+            return None
+        if prefer:
+            matches.sort(
+                key=lambda name: (
+                    0
+                    if any(token in norm[name].replace("_", "") for token in prefer)
+                    else 1,
+                    len(norm[name]),
+                )
+            )
+        else:
+            matches.sort(key=lambda name: len(norm[name]))
+        return index[matches[0]]
+
+    left_hip = find("hip", "left")
+    right_hip = find("hip", "right")
+    pelvis = None
+    if left_hip is not None and right_hip is not None:
+        pelvis = left_hip
+    torso = find("torso")
+
     pairs = [
-        (find("pelvis"), find("torso")),
-        (find("hip", "r"), find("knee", "r")),
-        (find("knee", "r"), find("ankle", "r")),
-        (find("ankle", "r"), find("toe", "r")),
-        (find("hip", "l"), find("knee", "l")),
-        (find("knee", "l"), find("ankle", "l")),
-        (find("ankle", "l"), find("toe", "l")),
-        (find("shoulder", "r"), find("elbow", "r")),
-        (find("elbow", "r"), find("wrist", "r")),
-        (find("shoulder", "l"), find("elbow", "l")),
-        (find("elbow", "l"), find("wrist", "l")),
-        (find("shoulder", "r"), find("shoulder", "l")),
-        (find("hip", "r"), find("hip", "l")),
+        (pelvis, torso),
+        (right_hip, find("knee", "right")),
+        (find("knee", "right"), find("ankle", "right")),
+        (find("ankle", "right"), find("foot", "right", prefer=("footindex", "toe"))),
+        (find("ankle", "right"), find("heel", "right")),
+        (left_hip, find("knee", "left")),
+        (find("knee", "left"), find("ankle", "left")),
+        (find("ankle", "left"), find("foot", "left", prefer=("footindex", "toe"))),
+        (find("ankle", "left"), find("heel", "left")),
+        (find("shoulder", "right"), find("elbow", "right")),
+        (find("elbow", "right"), find("wrist", "right")),
+        (find("shoulder", "left"), find("elbow", "left")),
+        (find("elbow", "left"), find("wrist", "left")),
+        (find("shoulder", "right"), find("shoulder", "left")),
+        (right_hip, left_hip),
+        (find("shoulder", "right"), right_hip),
+        (find("shoulder", "left"), left_hip),
         (find("neck"), find("head")),
     ]
     out = []
@@ -1380,7 +1487,11 @@ def _external_load_payload(path: str | Path | None, *, target_time: list[float])
     df = read_storage(force_path)
     if df.empty or "time" not in df.columns:
         return None
-    src_t = pd.to_numeric(df["time"], errors="coerce").to_numpy(dtype=float)
+    df = df.copy()
+    df["time"] = pd.to_numeric(df["time"], errors="coerce")
+    df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=["time"])
+    df = df.sort_values("time").drop_duplicates(subset=["time"], keep="last").reset_index(drop=True)
+    src_t = df["time"].to_numpy(dtype=float)
     load_names = sorted(
         {
             col[:-3]
@@ -1388,9 +1499,32 @@ def _external_load_payload(path: str | Path | None, *, target_time: list[float])
             if col.endswith("_vx") and f"{col[:-3]}_px" in df.columns
         }
     )
-    frames = []
+    if len(src_t) < 2 or not load_names:
+        return {
+            "path": str(force_path),
+            "names": load_names,
+            "frames": [],
+            "diagnostics": {
+                "warning": "No usable external-force samples were found.",
+            },
+        }
     target = np.asarray(target_time, dtype=float)
-    for t in target:
+    target = target[np.isfinite(target)]
+    if len(target) == 0:
+        return {"path": str(force_path), "names": load_names, "frames": []}
+
+    target_start = float(target[0])
+    target_end = float(target[-1])
+    source_start = float(src_t[0])
+    source_end = float(src_t[-1])
+    overlap = max(0.0, min(target_end, source_end) - max(target_start, source_start))
+    target_duration = max(1e-12, target_end - target_start)
+    overlap_fraction = overlap / target_duration
+    frames = []
+    active_counts = {name: 0 for name in load_names}
+    max_magnitudes = {name: 0.0 for name in load_names}
+
+    for t in np.asarray(target_time, dtype=float):
         frame = []
         for name in load_names:
             values = {}
@@ -1399,15 +1533,43 @@ def _external_load_payload(path: str | Path | None, *, target_time: list[float])
                 y = pd.to_numeric(df[col], errors="coerce").replace([np.inf, -np.inf], np.nan)
                 arr = y.fillna(0.0).to_numpy(dtype=float)
                 values[suffix] = float(np.interp(t, src_t, arr, left=0.0, right=0.0))
+            magnitude = float(np.linalg.norm([values["vx"], values["vy"], values["vz"]]))
+            if magnitude > 1e-6:
+                active_counts[name] += 1
+                max_magnitudes[name] = max(max_magnitudes[name], magnitude)
             frame.append(
                 {
                     "name": name,
                     "point": [values["px"], values["py"], values["pz"]],
                     "force": [values["vx"], values["vy"], values["vz"]],
+                    "magnitude": magnitude,
                 }
             )
         frames.append(frame)
-    return {"path": str(force_path), "names": load_names, "frames": frames}
+
+    total_active = sum(active_counts.values())
+    warning = None
+    if overlap_fraction < 0.75:
+        warning = (
+            "External-load time range does not fully overlap the displayed IK frames. "
+            "Regenerate external loads against the IK time vector before interpreting force arrows."
+        )
+    elif total_active == 0:
+        warning = "External-load file was read, but all displayed force vectors are zero."
+
+    return {
+        "path": str(force_path),
+        "names": load_names,
+        "frames": frames,
+        "diagnostics": {
+            "source_time_range": [source_start, source_end],
+            "target_time_range": [target_start, target_end],
+            "overlap_fraction": float(overlap_fraction),
+            "active_frame_counts": active_counts,
+            "max_magnitudes": max_magnitudes,
+            "warning": warning,
+        },
+    }
 
 
 def _write_visualizer_html(
@@ -1460,7 +1622,7 @@ def _write_visualizer_html(
 <body>
   <header>
     <h1>__TITLE__</h1>
-    <div class="sub">Three.js model playback with marker fallback, external-force arrows, IK coordinate plots, and inverse-dynamics traces.</div>
+    <div class="sub">Three.js model playback with marker fallback, external-force arrows, complete IK coordinate plots, and complete inverse-dynamics traces.</div>
   </header>
   <main>
     <section>
@@ -1472,7 +1634,8 @@ def _write_visualizer_html(
         <canvas id="threeScene"></canvas>
         <div class="legend">
           <span class="pill">teal: markers</span>
-          <span class="pill">dark lines: skeleton</span>
+          <span class="pill">dark lines: marker skeleton</span>
+          <span class="pill">blue: model bone overlay</span>
           <span class="pill">orange: external forces</span>
         </div>
       </div>
@@ -1491,7 +1654,7 @@ def _write_visualizer_html(
         <button id="toggleForces" class="active">Forces</button>
         <label>Upload GLB<input id="glbUpload" type="file" accept=".glb,model/gltf-binary"></label>
       </div>
-      <div class="notice">The uploaded GLB stays in your browser. Use this page on GitHub Pages to inspect any monomech-exported animation.</div>
+      <div class="notice" id="viewerNotice">Upload a monomech GLB or open an exported viewer to inspect synchronized model motion, markers, external forces, IK, and inverse dynamics.</div>
     </section>
     <div class="stack">
       <section>
@@ -1525,8 +1688,12 @@ def _write_visualizer_html(
     const playBtn = document.getElementById('play');
     const speedSelect = document.getElementById('speed');
     const status = document.getElementById('viewerStatus');
+    const notice = document.getElementById('viewerNotice');
     let idx = 0, playing = false, lastTick = 0;
     scrub.max = Math.max(0, marker.frames.length - 1);
+    if (force?.diagnostics?.warning) {
+      notice.textContent = force.diagnostics.warning;
+    }
 
     document.getElementById('stats').innerHTML = [
       ['Frames', marker.frames.length],
@@ -1556,9 +1723,10 @@ def _write_visualizer_html(
 
     const markersGroup = new THREE.Group();
     const skeletonGroup = new THREE.Group();
+    const modelSkeletonGroup = new THREE.Group();
     const forceGroup = new THREE.Group();
     const modelGroup = new THREE.Group();
-    scene.add(modelGroup, skeletonGroup, markersGroup, forceGroup);
+    scene.add(modelGroup, modelSkeletonGroup, skeletonGroup, markersGroup, forceGroup);
 
     const markerMaterial = new THREE.MeshStandardMaterial({ color:0x0f766e, roughness:.55, metalness:0.0 });
     const markerGeom = new THREE.SphereGeometry(0.018, 16, 12);
@@ -1576,6 +1744,82 @@ def _write_visualizer_html(
       skeletonGroup.add(line);
       return line;
     });
+    const modelSkeletonMaterial = new THREE.LineBasicMaterial({ color:0x2f6fed, linewidth:3 });
+    const modelSkeletonLines = [];
+
+    function cleanNodeName(name) {
+      return String(name || '').toLowerCase().replace(/^node_/, '').replace(/^mesh_/, '');
+    }
+    function findModelNode(...needles) {
+      const wanted = needles.map((item) => String(item).toLowerCase());
+      let best = null;
+      if (!glbRoot) return null;
+      glbRoot.traverse((node) => {
+        if (best || !node.name) return;
+        const clean = cleanNodeName(node.name);
+        if (wanted.every((needle) => clean.includes(needle))) best = node;
+      });
+      return best;
+    }
+    function firstModelNode(candidates) {
+      for (const candidate of candidates) {
+        const node = findModelNode(...candidate);
+        if (node) return node;
+      }
+      return null;
+    }
+    function rebuildModelSkeleton() {
+      modelSkeletonGroup.clear();
+      modelSkeletonLines.length = 0;
+      if (!glbRoot) return;
+      const nodes = {
+        pelvis: firstModelNode([['sacrum'], ['pelvis']]),
+        pelvisR: firstModelNode([['r_pelvis'], ['pelvis', 'r']]),
+        pelvisL: firstModelNode([['l_pelvis'], ['pelvis', 'l']]),
+        femurR: firstModelNode([['femur_r'], ['femur', 'r']]),
+        tibiaR: firstModelNode([['tibia_r'], ['tibia', 'r']]),
+        footR: firstModelNode([['talus_r'], ['calcn_r'], ['bofoot'], ['foot']]),
+        femurL: firstModelNode([['femur_l'], ['femur', 'l']]),
+        tibiaL: firstModelNode([['tibia_l'], ['tibia', 'l']]),
+        footL: firstModelNode([['talus_l'], ['calcn_l'], ['l_foot'], ['l_bofoot']]),
+        torso: firstModelNode([['hat_ribs'], ['thoracic1'], ['lumbar1']]),
+        skull: firstModelNode([['skull'], ['hat_skull']]),
+        humerusR: firstModelNode([['humerus_r'], ['humerus', 'r']]),
+        radiusR: firstModelNode([['radius_r'], ['ulna_r'], ['radius', 'r']]),
+        handR: firstModelNode([['metacarpal3_r'], ['capitate_r'], ['wrist', 'r']]),
+        humerusL: firstModelNode([['humerus_l'], ['humerus', 'l']]),
+        radiusL: firstModelNode([['radius_l'], ['ulna_l'], ['radius', 'l']]),
+        handL: firstModelNode([['metacarpal3_l'], ['capitate_l'], ['wrist', 'l']]),
+      };
+      const pairs = [
+        [nodes.pelvis, nodes.torso], [nodes.torso, nodes.skull],
+        [nodes.pelvisR || nodes.pelvis, nodes.femurR], [nodes.femurR, nodes.tibiaR], [nodes.tibiaR, nodes.footR],
+        [nodes.pelvisL || nodes.pelvis, nodes.femurL], [nodes.femurL, nodes.tibiaL], [nodes.tibiaL, nodes.footL],
+        [nodes.torso, nodes.humerusR], [nodes.humerusR, nodes.radiusR], [nodes.radiusR, nodes.handR],
+        [nodes.torso, nodes.humerusL], [nodes.humerusL, nodes.radiusL], [nodes.radiusL, nodes.handL],
+      ];
+      for (const [a, b] of pairs) {
+        if (!a || !b || a === b) continue;
+        const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+        const line = new THREE.Line(geom, modelSkeletonMaterial);
+        line.userData = { a, b };
+        modelSkeletonGroup.add(line);
+        modelSkeletonLines.push(line);
+      }
+    }
+    function updateModelSkeleton() {
+      const pa = new THREE.Vector3();
+      const pb = new THREE.Vector3();
+      for (const line of modelSkeletonLines) {
+        line.userData.a.getWorldPosition(pa);
+        line.userData.b.getWorldPosition(pb);
+        const pos = line.geometry.attributes.position;
+        pos.setXYZ(0, pa.x, pa.y, pa.z);
+        pos.setXYZ(1, pb.x, pb.y, pb.z);
+        pos.needsUpdate = true;
+        line.geometry.computeBoundingSphere();
+      }
+    }
 
     function validPoint(p) {
       return p && p.length === 3 && p.every(Number.isFinite);
@@ -1632,7 +1876,7 @@ def _write_visualizer_html(
     function frameScene() {
       const box = new THREE.Box3();
       let hasBox = false;
-      for (const group of [modelGroup, markersGroup, skeletonGroup]) {
+      for (const group of [modelGroup, modelSkeletonGroup, markersGroup, skeletonGroup]) {
         const b = new THREE.Box3().setFromObject(group);
         if (Number.isFinite(b.min.x) && !b.isEmpty()) {
           if (!hasBox) box.copy(b); else box.union(b);
@@ -1677,7 +1921,9 @@ def _write_visualizer_html(
         mixer = gltf.animations.length ? new THREE.AnimationMixer(glbRoot) : null;
         glbDuration = gltf.animations[0]?.duration || 0;
         if (mixer) mixer.clipAction(gltf.animations[0]).play();
+        rebuildModelSkeleton();
         modelGroup.visible = true;
+        modelSkeletonGroup.visible = true;
         document.getElementById('toggleModel').classList.add('active');
         frameScene();
         updateFrame(idx);
@@ -1692,6 +1938,8 @@ def _write_visualizer_html(
       const t0 = marker.time[0], t1 = marker.time[marker.time.length - 1];
       const frac = t1 > t0 ? (marker.time[i] - t0) / (t1 - t0) : 0;
       mixer.setTime(Math.max(0, Math.min(glbDuration, frac * glbDuration)));
+      modelGroup.updateMatrixWorld(true);
+      updateModelSkeleton();
     }
     if (data.glb_path) loadGlb(data.glb_path);
     else status.textContent = 'Upload a GLB or use the marker view.';
@@ -1706,14 +1954,15 @@ def _write_visualizer_html(
       playing = !playing;
       playBtn.textContent = playing ? 'Pause' : 'Play';
     });
-    function toggleButton(id, group) {
+    function toggleButton(id, ...groups) {
       const btn = document.getElementById(id);
       btn.addEventListener('click', () => {
-        group.visible = !group.visible;
-        btn.classList.toggle('active', group.visible);
+        const visible = !groups[0].visible;
+        for (const group of groups) group.visible = visible;
+        btn.classList.toggle('active', visible);
       });
     }
-    toggleButton('toggleModel', modelGroup);
+    toggleButton('toggleModel', modelGroup, modelSkeletonGroup);
     toggleButton('toggleMarkers', markersGroup);
     toggleButton('toggleForces', forceGroup);
 
@@ -1722,7 +1971,10 @@ def _write_visualizer_html(
       const ctx = canvas.getContext('2d');
       const select = document.getElementById(selectId);
       const cols = store?.columns || [];
-      select.innerHTML = cols.length ? cols.map(c => `<option value="${c}">${c}</option>`).join('') : '<option>No data</option>';
+      const palette = ['#0f766e', '#d65a31', '#2f6fed', '#7a4f9a', '#8a6f00', '#256c4f', '#b42318', '#475467'];
+      select.innerHTML = cols.length
+        ? `<option value="__all__">All signals (${cols.length})</option>` + cols.map(c => `<option value="${c}">${c}</option>`).join('')
+        : '<option>No data</option>';
       function draw() {
         const rect = canvas.getBoundingClientRect();
         canvas.width = Math.max(320, Math.floor(rect.width * devicePixelRatio));
@@ -1732,9 +1984,10 @@ def _write_visualizer_html(
         ctx.clearRect(0, 0, w, h);
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, w, h);
-        const col = select.value || cols[0];
+        const selected = select.value || '__all__';
+        const seriesNames = selected === '__all__' ? cols : [selected];
         const x = store?.time || [];
-        const y = store?.series?.[col] || [];
+        const allY = seriesNames.flatMap((name) => store?.series?.[name] || []);
         ctx.strokeStyle = '#d9e2df';
         ctx.lineWidth = 1;
         for (let i=0; i<5; i++) {
@@ -1743,11 +1996,11 @@ def _write_visualizer_html(
         }
         ctx.fillStyle = '#66736f';
         ctx.font = '12px system-ui, sans-serif';
-        if (!x.length || !y.length) {
+        if (!x.length || !allY.length) {
           ctx.fillText('No series available', 46, h / 2);
           return;
         }
-        const finite = y.filter(Number.isFinite);
+        const finite = allY.filter(Number.isFinite);
         let minY = Math.min(...finite), maxY = Math.max(...finite);
         if (!Number.isFinite(minY) || !Number.isFinite(maxY)) { minY = 0; maxY = 1; }
         if (Math.abs(maxY - minY) < 1e-9) { maxY += 1; minY -= 1; }
@@ -1758,17 +2011,26 @@ def _write_visualizer_html(
         ctx.fillText(maxY.toPrecision(4), 7, top + 4);
         ctx.fillText(minY.toPrecision(4), 7, bottom);
         ctx.fillText('time (s)', Math.max(46, right - 58), h - 8);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        let started = false;
-        for (let i=0; i<Math.min(x.length, y.length); i++) {
-          if (!Number.isFinite(x[i]) || !Number.isFinite(y[i])) { started = false; continue; }
-          const px = sx(x[i]), py = sy(y[i]);
-          if (!started) { ctx.moveTo(px, py); started = true; }
-          else ctx.lineTo(px, py);
+        for (const [seriesIdx, name] of seriesNames.entries()) {
+          const y = store?.series?.[name] || [];
+          ctx.strokeStyle = selected === '__all__' ? palette[seriesIdx % palette.length] : color;
+          ctx.globalAlpha = selected === '__all__' ? 0.72 : 1.0;
+          ctx.lineWidth = selected === '__all__' ? 1.35 : 2;
+          ctx.beginPath();
+          let started = false;
+          for (let i=0; i<Math.min(x.length, y.length); i++) {
+            if (!Number.isFinite(x[i]) || !Number.isFinite(y[i])) { started = false; continue; }
+            const px = sx(x[i]), py = sy(y[i]);
+            if (!started) { ctx.moveTo(px, py); started = true; }
+            else ctx.lineTo(px, py);
+          }
+          ctx.stroke();
         }
-        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+        if (selected === '__all__') {
+          ctx.fillStyle = '#66736f';
+          ctx.fillText(`${seriesNames.length} signals`, 46, top + 16);
+        }
         if (marker.time.length) {
           const t = marker.time[idx] || 0;
           const px = sx(Math.max(minX, Math.min(maxX, t)));
@@ -1843,6 +2105,7 @@ def save_opensim_visualizer(
     title: str = "monomech IK and ID visualizer",
     max_frames: int = 240,
     marker_stride: int = 1,
+    embed_glb: bool = True,
 ) -> OpenSimVisualizerResult:
     """Write a notebook-ready HTML dashboard for IK, ID, forces, and 3D motion."""
 
@@ -1859,13 +2122,12 @@ def save_opensim_visualizer(
     forces = _external_load_payload(external_loads_path, target_time=markers["time"])
 
     glb_ref = None
+    glb_source = None
     if glb_path is not None:
         glb = Path(glb_path).expanduser().resolve()
         if glb.is_file():
-            try:
-                glb_ref = glb.relative_to(html_path.parent).as_posix()
-            except ValueError:
-                glb_ref = glb.as_uri()
+            glb_source = str(glb)
+            glb_ref = _asset_reference(glb, html_path.parent, embed=embed_glb)
 
     payload = {
         "title": title,
@@ -1879,7 +2141,8 @@ def save_opensim_visualizer(
     _write_visualizer_html(html_path, title=title, payload=payload)
     metadata = {
         "html_path": str(html_path),
-        "glb_path": glb_ref,
+        "glb_path": glb_source,
+        "embedded_glb": bool(glb_ref and glb_ref.startswith("data:")),
         "marker_frames": len(markers["frames"]),
         "marker_count": len(markers["names"]),
         "force_count": 0 if forces is None else len(forces["names"]),

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import tempfile
+import importlib
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
-import importlib
 
 import numpy as np
 import pandas as pd
@@ -12,10 +11,10 @@ import pandas as pd
 from .config import OpenSimIDConfig, OpenSimIKConfig, OpenSimScaleConfig
 from .external import ExternalLoadsSpec
 from .io.storage import read_storage
+from .io.trc import load_trc, write_trc
 from .opensim_runtime import require_opensim
 from .results import OpenSimScaleResult, StorageResult
 from .utils import ensure_dir
-from .io.trc import load_trc, write_trc
 
 
 @contextmanager
@@ -45,7 +44,12 @@ def _opensim_logging(osim, *, quiet: bool, log_path: Path):
             try:
                 yield
             finally:
-                if previous_level is not None and logger is not None and hasattr(logger, "setLevelString"):
+                can_restore_level = (
+                    previous_level is not None
+                    and logger is not None
+                    and hasattr(logger, "setLevelString")
+                )
+                if can_restore_level:
                     try:
                         logger.setLevelString(previous_level)
                     except Exception:
@@ -77,7 +81,12 @@ def _finite_interp(values: np.ndarray, time: np.ndarray) -> tuple[np.ndarray, di
     return out, report
 
 
-def _sanitize_marker_result_for_opensim(markers, *, output_dir: Path, prefix: str) -> tuple[Path | None, dict]:
+def _sanitize_marker_result_for_opensim(
+    markers,
+    *,
+    output_dir: Path,
+    prefix: str,
+) -> tuple[Path | None, dict]:
     data = np.asarray(markers.data, dtype=float).copy()
     time = np.asarray(markers.time, dtype=float)
     report = {
@@ -146,7 +155,11 @@ def _prepare_trc_for_opensim(
             )
         return trc_path, {"sanitized": False, "input_nan_count": 0}
 
-    clean_path, report = _sanitize_marker_result_for_opensim(markers, output_dir=output_dir, prefix=prefix)
+    clean_path, report = _sanitize_marker_result_for_opensim(
+        markers,
+        output_dir=output_dir,
+        prefix=prefix,
+    )
     report["sanitized"] = clean_path is not None
     report["source_trc_path"] = str(trc_path)
     if clean_path is None:
@@ -218,7 +231,9 @@ def _prepare_storage_for_opensim(
     for col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    nonfinite_counts = {col: int((~np.isfinite(df[col].to_numpy(dtype=float))).sum()) for col in df.columns}
+    nonfinite_counts = {
+        col: int((~np.isfinite(df[col].to_numpy(dtype=float))).sum()) for col in df.columns
+    }
     total_nonfinite = sum(nonfinite_counts.values())
 
     if total_nonfinite == 0:
@@ -327,7 +342,11 @@ def _write_external_loads_data(
         if merged is None:
             merged = df
         else:
-            merged = merged.merge(df, on="time", how="outer").sort_values("time").reset_index(drop=True)
+            merged = (
+                merged.merge(df, on="time", how="outer")
+                .sort_values("time")
+                .reset_index(drop=True)
+            )
             merged = merged.fillna(0.0)
 
         force_specs.append(spec)
@@ -374,10 +393,10 @@ def _write_external_loads_data(
 
     return mot_path, xml_path
 
-
-
-
-def _resolve_scale_time_range(trc_path: str | Path, config: OpenSimScaleConfig) -> tuple[float, float]:
+def _resolve_scale_time_range(
+    trc_path: str | Path,
+    config: OpenSimScaleConfig,
+) -> tuple[float, float]:
     marker_trial = load_trc(trc_path)
     time = marker_trial.markers.time
 
@@ -445,7 +464,7 @@ def _find_array_double_type(osim):
 
     for mod in candidates:
         if hasattr(mod, "ArrayDouble"):
-            return getattr(mod, "ArrayDouble")
+            return mod.ArrayDouble
 
     return None
 
@@ -454,8 +473,8 @@ def _make_osim_time_range(osim, start_time: float, end_time: float):
     """
     Build the OpenSim Array<double> object expected by setTimeRange().
     """
-    ArrayDouble = _find_array_double_type(osim)
-    if ArrayDouble is None:
+    array_double = _find_array_double_type(osim)
+    if array_double is None:
         raise AttributeError(
             "Could not find ArrayDouble in the active OpenSim bindings. "
             "The binding does not appear to expose the OpenSim Array<double> type."
@@ -468,7 +487,7 @@ def _make_osim_time_range(osim, start_time: float, end_time: float):
 
     # Pattern 1: empty constructor + append
     try:
-        arr = ArrayDouble()
+        arr = array_double()
         try:
             arr.append(values[0])
             arr.append(values[1])
@@ -486,7 +505,7 @@ def _make_osim_time_range(osim, start_time: float, end_time: float):
 
     # Pattern 2: construct with first value, then append second
     try:
-        arr = ArrayDouble(values[0])
+        arr = array_double(values[0])
         try:
             arr.append(values[1])
             return arr
@@ -498,7 +517,7 @@ def _make_osim_time_range(osim, start_time: float, end_time: float):
     # Pattern 3: construct from a Python sequence if the binding supports it
     for candidate in (values, tuple(values)):
         try:
-            arr = ArrayDouble(candidate)
+            arr = array_double(candidate)
             return arr
         except Exception as exc:
             errors.append(f"ArrayDouble({type(candidate).__name__}): {exc}")
@@ -656,7 +675,9 @@ def run_ik(
     elif hasattr(ik, "set_model_file"):
         ik.set_model_file(str(model_path))
     else:
-        raise AttributeError("Could not find a compatible model-file setter on InverseKinematicsTool.")
+        raise AttributeError(
+            "Could not find a compatible model-file setter on InverseKinematicsTool."
+        )
 
     # Marker data
     if hasattr(ik, "setMarkerDataFileName"):
@@ -664,7 +685,9 @@ def run_ik(
     elif hasattr(ik, "set_marker_data_file_name"):
         ik.set_marker_data_file_name(str(trc_path))
     else:
-        raise AttributeError("Could not find a compatible marker-data setter on InverseKinematicsTool.")
+        raise AttributeError(
+            "Could not find a compatible marker-data setter on InverseKinematicsTool."
+        )
 
     # Output motion
     if hasattr(ik, "setOutputMotionFileName"):
@@ -672,7 +695,9 @@ def run_ik(
     elif hasattr(ik, "set_output_motion_file_name"):
         ik.set_output_motion_file_name(str(mot_path))
     else:
-        raise AttributeError("Could not find a compatible output-motion setter on InverseKinematicsTool.")
+        raise AttributeError(
+            "Could not find a compatible output-motion setter on InverseKinematicsTool."
+        )
 
     # Results dir
     if hasattr(ik, "setResultsDir"):
@@ -765,7 +790,6 @@ def run_id(
     external_xml = None
 
     if external_forces is not None:
-       # _validate_external_loads_against_model(external_forces, model_path)
         ik_time = _read_storage_time_vector(ik_path)
         external_mot, external_xml = _write_external_loads_data(
             external_forces,
@@ -808,7 +832,9 @@ def run_id(
         tool.set_start_time(start_time)
         tool.set_end_time(end_time)
     else:
-        raise AttributeError("Could not find compatible start/end time setters on InverseDynamicsTool.")
+        raise AttributeError(
+            "Could not find compatible start/end time setters on InverseDynamicsTool."
+        )
 
     if external_xml is not None:
         if hasattr(tool, "setExternalLoadsFileName"):
@@ -864,32 +890,8 @@ def run_id(
 
 def _read_storage_time_vector(storage_path: str | Path) -> np.ndarray:
     storage_path = Path(storage_path)
-
-    with storage_path.open("r", encoding="utf-8") as f:
-        lines = f.readlines()
-
-    endheader_idx = None
-    for i, line in enumerate(lines):
-        if line.strip().lower() == "endheader":
-            endheader_idx = i
-            break
-
-    if endheader_idx is None:
-        raise ValueError(f"Could not find 'endheader' in storage file: {storage_path}")
-
-    df = pd.read_csv(
-        storage_path,
-        sep=r"\t+|\s+",
-        engine="python",
-        skiprows=endheader_idx + 1,
-    )
-
-    time_col = None
-    for candidate in ("time", "Time"):
-        if candidate in df.columns:
-            time_col = candidate
-            break
-
+    df = read_storage(storage_path)
+    time_col = "time" if "time" in df.columns else ("Time" if "Time" in df.columns else None)
     if time_col is None:
         raise ValueError(f"Could not find time column in storage file: {storage_path}")
 

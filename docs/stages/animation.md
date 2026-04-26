@@ -141,7 +141,7 @@ viewer = mm.save_animation_viewer(
 print(viewer)
 ```
 
-Open `viewer.html` in a browser to inspect the animation. The viewer also has an **Upload GLB** control, so you can reuse the same page with a new exported model.
+Open `viewer.html` in a browser to inspect the animation. By default, the GLB is embedded into the HTML when you provide `glb_path`, so the model appears immediately in notebooks, local files, and shared HTML exports. The viewer also has an **Upload GLB** control, so you can reuse the same page with a new exported model.
 
 ## Notebook IK/ID Dashboard
 
@@ -170,7 +170,7 @@ viewer
 
 In Jupyter, the returned object displays as an embedded iframe. In a script, open `viewer.html` in a browser.
 
-The same visualizer works well on GitHub Pages because it does not need a Python server. The demo page below lets readers upload their own `.glb` export directly in the browser:
+The same visualizer works well on GitHub Pages because it does not need a Python server. The online page lets readers upload their own `.glb` export directly in the browser:
 
 You can also build the dashboard without mesh geometry:
 
@@ -190,7 +190,7 @@ viewer = mm.save_opensim_visualizer(
 )
 ```
 
-[Open a small visualizer demo](../assets/visualizer-demo.html){ .md-button }
+[Open the online GLB visualizer](../assets/visualizer.html){ .md-button }
 
 ## External Forces In The Viewer
 
@@ -201,6 +201,8 @@ time right_vx right_vy right_vz right_px right_py right_pz
 ```
 
 Each load needs velocity/force components ending in `_vx`, `_vy`, `_vz` and matching point columns ending in `_px`, `_py`, `_pz`. The viewer interpolates those vectors onto the displayed marker frames, scales the arrows for readability, and keeps them synchronized with the IK and ID plots.
+
+For estimated ground-reaction forces from `mm.external.estimate_grf()`, monomech remaps pose axes into the same OpenSim-friendly coordinate system used by TRC export (`X=z`, `Y=y`, `Z=x`) and grounds the vertical axis before writing external loads. That keeps force application points aligned with the IK model rather than the original camera coordinate frame.
 
 ```python
 viewer = mm.save_opensim_visualizer(
@@ -222,8 +224,8 @@ Use these knobs when the GLB is too large or export takes too long:
 | `stride=2` | Exports every second IK frame. Higher values make smaller files. |
 | `thin_pos_tol=1e-4` | Removes translation keyframes that barely change. |
 | `thin_rot_tol_deg=0.05` | Removes rotation keyframes that barely change. |
-| `drop_static_nodes=True` | Stores static body geometry with one keyframe. |
-| `drop_origin_nodes=True` | Drops unresolved nodes sitting at the origin. |
+| `drop_static_nodes=False` | Keeps complete animation tracks for every exported mesh by default. Set to `True` for smaller review files. |
+| `drop_origin_nodes=False` | Keeps every resolved mesh in the scene by default. Set to `True` only when diagnosing unresolved geometry sitting at the origin. |
 | `decimate_target_reduction=0.35` | Reduces mesh triangle count before writing GLB. |
 
 For fast previews, start with:
@@ -261,6 +263,6 @@ New code should prefer `save_opensim_animation()` because it returns paths, meta
 | --- | --- |
 | Missing optional dependency error | Install `python -m pip install "monomech[animation]"`. |
 | No geometry is exported | Pass `geom_dir=` pointing at the OpenSim `Geometry` folder. |
-| GLB contains unresolved parts at the origin | Keep `drop_origin_nodes=True` or inspect `result.metadata["missing_geometry"]`. |
+| GLB contains unresolved parts at the origin | Try `drop_origin_nodes=True` for diagnostic exports, then inspect `result.metadata["missing_geometry"]` and the geometry folder path. |
 | Animation looks too slow or too fast | Check the IK MOT time column and selected `t_start`, `t_end`, and `stride`. |
 | File is too large | Increase `stride`, use keyframe thinning, or set `decimate_target_reduction`. |

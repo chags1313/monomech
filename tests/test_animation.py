@@ -12,7 +12,7 @@ def test_animation_viewer_uses_relative_glb(tmp_path):
     html = mm.save_animation_viewer(tmp_path / "viewer.html", glb, title="Test animation")
 
     text = html.read_text(encoding="utf-8")
-    assert '"glb_path": "motion.glb"' in text
+    assert '"glb_path": "data:model/gltf-binary;base64,' in text
     assert "GLTFLoader" in text
     assert "Upload GLB" in text
     assert "Test animation" in text
@@ -82,5 +82,35 @@ def test_opensim_visualizer_writes_dashboard_without_glb(tmp_path):
     assert "Upload GLB" in text
     assert "pelvis_tilt" in text
     assert "knee_angle_r_moment" in text
+    assert "All signals" in text
     assert "external forces" in text
     assert result.metadata["force_count"] == 1
+
+
+def test_visualizer_keeps_all_storage_signals(tmp_path):
+    times = np.array([0.0, 0.5, 1.0])
+    markers = pd.DataFrame(
+        {
+            "hip_r_x": [0.0, 0.1, 0.2],
+            "hip_r_y": [0.0, 0.0, 0.0],
+            "hip_r_z": [0.0, 0.0, 0.0],
+        },
+        index=pd.Index(times, name="time"),
+    )
+    ik_path = tmp_path / "many.mot"
+    cols = ["time", *[f"coord_{i}" for i in range(20)]]
+    rows = [" ".join(cols)]
+    for t in times:
+        rows.append(" ".join([str(t), *[str(i + t) for i in range(20)]]))
+    ik_path.write_text("endheader\n" + "\n".join(rows), encoding="utf-8")
+
+    result = mm.save_opensim_visualizer(
+        tmp_path / "viewer.html",
+        marker_dataframe=markers,
+        ik_path=ik_path,
+    )
+
+    text = result.html_path.read_text(encoding="utf-8")
+    assert "coord_0" in text
+    assert "coord_19" in text
+    assert "All signals (${cols.length})" in text

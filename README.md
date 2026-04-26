@@ -61,11 +61,7 @@ pose3d_global.to_trc(output_dir / "subject01_global.trc")
 Or run the common video export path in one call:
 
 ```python
-run = trial.run_pipeline(
-    export_csv=True,
-    export_trc=True,
-    output_dir=output_dir,
-)
+run = mm.pose_to_trc(video_path, output_dir=output_dir)
 
 print(run.csv_paths)
 print(run.trc_path)
@@ -76,46 +72,41 @@ print(run.trc_path)
 ```python
 import monomech as mm
 
-trial = mm.load_video("data/subject01.mp4")
-run = trial.run_pipeline(export_csv=True, export_trc=True, output_dir="outputs/subject01")
-
-model_path = mm.get_builtin_osim_model("pose")
-
-scale = trial.run_opensim_scale(
-    model_path=model_path,
-    trc_path=run.trc_path,
-    output_dir="outputs/subject01/scale",
-)
-
-ik = trial.run_opensim_ik(
-    model_path=scale.scaled_model_path,
-    trc_path=run.trc_path,
-    output_dir="outputs/subject01/ik",
-)
-
-estimated_loads = mm.external.estimate_grf(
-    pose3d=run.pose3d_global,
+result = mm.video_to_id(
+    "data/subject01.mp4",
+    model_path="models/subject01_scaled.osim",
+    geom_dir="models/FullBodyModel-4.0/Geometry",
+    output_dir="outputs/subject01",
     body_mass_kg=75.0,
 )
 
-id_result = trial.run_opensim_id(
-    model_path=scale.scaled_model_path,
-    ik_path=ik.path,
-    external_forces=estimated_loads,
-    output_dir="outputs/subject01/id",
+print(result.trc_path)
+print(result.ik.path)
+print(result.id.path)
+print(result.visualizer.html_path)
+```
+
+If you already have marker data in a TRC file, start at OpenSim:
+
+```python
+result = mm.markers_to_id(
+    "outputs/subject01/subject01.trc",
+    model_path="models/subject01_scaled.osim",
+    output_dir="outputs/subject01/opensim",
+    external_forces=None,
 )
 
-print(id_result.path)
-print(id_result.metadata["external_loads_xml_path"])
+print(result.ik.path)
+print(result.id.path)
 ```
 
 Export the IK and ID run to one portable animation file:
 
 ```python
 animation = mm.save_opensim_animation(
-    osim_path=scale.scaled_model_path,
-    mot_path=ik.path,
-    id_path=id_result.path,
+    osim_path="models/subject01_scaled.osim",
+    mot_path=result.ik.path,
+    id_path=result.id.path,
     geom_dir="models/FullBodyModel-4.0/Geometry",
     out_glb_path="outputs/subject01/animation/subject01_ik_id.glb",
     stride=2,
@@ -130,17 +121,17 @@ Create a notebook-friendly Three.js dashboard with the animated model, marker fa
 ```python
 viewer = mm.save_opensim_visualizer(
     "outputs/subject01/animation/ik_id_viewer.html",
-    osim_path=scale.scaled_model_path,
-    ik_path=ik.path,
-    id_path=id_result.path,
-    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    osim_path="models/subject01_scaled.osim",
+    ik_path=result.ik.path,
+    id_path=result.id.path,
+    external_loads_path=result.id.metadata["external_loads_mot_path"],
     glb_path=animation.glb_path,
 )
 
 viewer
 ```
 
-The dashboard is a standalone HTML file, so it works in notebooks, local browsers, and GitHub Pages. When `glb_path` is provided, the GLB is embedded so the animated mesh loads immediately. It also includes an **Upload GLB** control, which lets a reader drag in their own exported model without sending the file anywhere.
+The dashboard is a standalone HTML file, so it works in notebooks, local browsers, and GitHub Pages. When `glb_path` is provided, the GLB is embedded so the animated mesh loads immediately. The online visualizer starts empty and includes an **Upload GLB** control, which lets a reader drag in their own exported model without sending the file anywhere.
 
 The GitHub Pages site includes an online GLB visualizer for quick review: [chags1313.github.io/monomech/visualizer/](https://chags1313.github.io/monomech/visualizer/).
 
@@ -217,8 +208,8 @@ Add `--opensim` when OpenSim-compatible bindings are installed.
 GitHub Actions builds distributions on every push to `main`. PyPI publishing goes directly to PyPI through trusted publishing and is triggered by version tags such as:
 
 ```bash
-git tag v0.15.4
-git push origin v0.15.4
+git tag v0.15.5
+git push origin v0.15.5
 ```
 
 The publish workflow can also be run manually from GitHub Actions with the `publish` input set to `true`.

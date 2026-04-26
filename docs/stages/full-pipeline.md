@@ -1,22 +1,19 @@
-# Full Pipeline Wrapper
+# Full Pipeline
 
-The trial-level pipeline wrapper runs the common video pose workflow in one call while still returning stage outputs. Use it after you have already stepped through the staged workflow once.
+The pipeline helpers run the common workflows in one call while still returning every stage output. Use the one-line functions for repeatable processing, and use the staged calls when you are tuning model fit, marker cleanup, external loads, or OpenSim settings.
 
 ## Video To TRC
 
 ```python
 import monomech as mm
 
-trial = mm.load_video("data/subject01.mp4")
-
-run = trial.run_pipeline(
-    pose2d=True,
-    pose3d_world=True,
-    pose3d_global=True,
-    export_csv=True,
-    export_trc=True,
+run = mm.pose_to_trc(
+    "data/subject01.mp4",
     output_dir="outputs/subject01",
+    sample_fps=30,
 )
+
+print(run.trc_path)
 ```
 
 ## Returned Object
@@ -31,57 +28,66 @@ The returned `PipelineRun` can contain:
 | `csv_paths` | CSV files written during export. |
 | `trc_path` | OpenSim-ready TRC path. |
 
-## Video To Inverse Dynamics
+## TRC Markers To Inverse Dynamics
 
-OpenSim scale, IK, external loads, and ID are intentionally separate from `run_pipeline()` because those stages usually require model checks and force assumptions.
+Use `markers_to_id()` when you already have an OpenSim-ready TRC:
 
 ```python
 import monomech as mm
 
-trial = mm.load_video("data/subject01.mp4")
+result = mm.markers_to_id(
+    "outputs/subject01/subject01.trc",
+    model_path="models/subject01_scaled.osim",
+    output_dir="outputs/subject01/opensim",
+    external_forces=None,
+)
 
-run = trial.run_pipeline(
-    export_csv=True,
-    export_trc=True,
+print(result.ik.path)
+print(result.id.path)
+```
+
+Pass measured or estimated external loads when you need kinetics:
+
+```python
+loads = mm.external.from_csv(
+    "data/right_force_plate.csv",
+    applied_to_body="calcn_r",
+    force_columns=("Fx", "Fy", "Fz"),
+    point_columns=("Px", "Py", "Pz"),
+    time_column="time",
+    name="right_grf",
+)
+
+result = mm.markers_to_id(
+    "outputs/subject01/subject01.trc",
+    model_path="models/subject01_scaled.osim",
+    output_dir="outputs/subject01/opensim",
+    external_forces=loads,
+)
+```
+
+## Video To Inverse Dynamics
+
+Use `video_to_id()` for the complete path from video to pose, TRC, IK, ID, optional GLB, and an HTML visualizer:
+
+```python
+import monomech as mm
+
+result = mm.video_to_id(
+    "data/subject01.mp4",
+    model_path="models/subject01_scaled.osim",
+    geom_dir="models/FullBodyModel-4.0/Geometry",
     output_dir="outputs/subject01",
-)
-
-model_path = mm.get_builtin_osim_model("pose")
-
-scale = trial.run_opensim_scale(
-    model_path=model_path,
-    trc_path=run.trc_path,
-    output_dir="outputs/subject01/scale",
-)
-
-ik = trial.run_opensim_ik(
-    model_path=scale.scaled_model_path,
-    trc_path=run.trc_path,
-    output_dir="outputs/subject01/ik",
-)
-
-estimated_loads = mm.external.estimate_grf(
-    pose3d=run.pose3d_global,
     body_mass_kg=75.0,
 )
 
-id_result = trial.run_opensim_id(
-    model_path=scale.scaled_model_path,
-    ik_path=ik.path,
-    external_forces=estimated_loads,
-    output_dir="outputs/subject01/id",
-)
-
-animation = mm.save_opensim_animation(
-    osim_path=scale.scaled_model_path,
-    mot_path=ik.path,
-    id_path=id_result.path,
-    out_glb_path="outputs/subject01/animation/subject01_ik_id.glb",
-)
-
-print(id_result.path)
-print(animation.glb_path)
+print(result.trc_path)
+print(result.ik.path)
+print(result.id.path)
+print(result.visualizer.html_path)
 ```
+
+By default, `video_to_id()` uses estimated bilateral ground-reaction forces from the pose result. Use measured force-plate data for quantitative kinetics, or pass `external_forces=None` to run ID without external loads as a setup check.
 
 ## What To Inspect At Each Stop
 
@@ -97,6 +103,6 @@ print(animation.glb_path)
 
 ## When To Use It
 
-Use `run_pipeline()` for repeatable video-to-TRC processing once you know the settings you want.
+Use `pose_to_trc()` for repeatable video-to-TRC processing once you know the settings you want.
 
-Use individual stage methods when you are exploring data, debugging model fit, tuning smoothing/export settings, or adding external loads for inverse dynamics.
+Use `markers_to_id()` when your input is already a TRC. Use `video_to_id()` when you want the complete video-to-ID path in one line. Use individual stage methods when you are exploring data, debugging model fit, tuning smoothing/export settings, or adding external loads for inverse dynamics.

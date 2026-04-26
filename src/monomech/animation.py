@@ -350,9 +350,12 @@ def _find_geometry_file(mesh_file: str, geometry_dirs: list[Path]) -> Path | Non
         return None
     mesh_path = Path(mesh_file)
     candidates = [mesh_path]
+    alias_names = _geometry_file_aliases(mesh_path.name)
     if not mesh_path.is_absolute():
         candidates.extend([directory / mesh_file for directory in geometry_dirs])
         candidates.extend([directory / mesh_path.name for directory in geometry_dirs])
+        for alias in alias_names:
+            candidates.extend([directory / alias for directory in geometry_dirs])
     for candidate in candidates:
         try:
             resolved = candidate.expanduser().resolve()
@@ -361,6 +364,47 @@ def _find_geometry_file(mesh_file: str, geometry_dirs: list[Path]) -> Path | Non
         if resolved.is_file():
             return resolved
     return None
+
+
+def _geometry_file_aliases(filename: str) -> list[str]:
+    """Return common OpenSim geometry filename variants for full-body models."""
+
+    stem = Path(filename).stem
+    suffix = Path(filename).suffix or ".vtp"
+    lower = stem.lower()
+    aliases: list[str] = []
+
+    def add(name: str) -> None:
+        full = f"{name}{suffix}"
+        if full != filename and full not in aliases:
+            aliases.append(full)
+
+    side_swap = re.match(r"^(?P<root>.+)_(?P<side>[rl])v?s?$", lower)
+    if side_swap:
+        root = side_swap.group("root")
+        side = side_swap.group("side")
+        add(f"{side}_{root}")
+        add(f"{side}_{root}_SOMEINVERTEDFACES")
+
+    prefix_swap = re.match(r"^(?P<side>[rl])_(?P<root>.+)$", lower)
+    if prefix_swap:
+        root = prefix_swap.group("root")
+        side = prefix_swap.group("side")
+        add(f"{root}_{side}")
+        add(f"{root}_{side}v")
+
+    if lower == "foot":
+        add("r_foot")
+    elif lower == "bofoot":
+        add("r_bofoot")
+    elif lower.startswith(("lumbar", "thoracic", "cerv")):
+        add("hat_spine")
+    elif lower.startswith("talus_"):
+        side = "r" if "_r" in lower else "l" if "_l" in lower else ""
+        if side:
+            add(f"{side}_talus")
+
+    return aliases
 
 
 def _load_polydata(path: Path, pv, *, target_reduction, target_error, preserve_topology):
@@ -1690,6 +1734,7 @@ def _write_visualizer_html(
     const status = document.getElementById('viewerStatus');
     const notice = document.getElementById('viewerNotice');
     let idx = 0, playing = false, lastTick = 0;
+    let timelineFrames = Math.max(1, marker.frames.length);
     scrub.max = Math.max(0, marker.frames.length - 1);
     if (force?.diagnostics?.warning) {
       notice.textContent = force.diagnostics.warning;
@@ -1849,7 +1894,7 @@ def _write_visualizer_html(
       }
     }
     function updateFrame(i) {
-      const n = Math.max(1, marker.frames.length);
+      const n = Math.max(1, timelineFrames);
       idx = ((Math.round(i) % n) + n) % n;
       const frame = marker.frames[idx] || [];
       markerMeshes.forEach((mesh, mi) => {
@@ -1864,8 +1909,11 @@ def _write_visualizer_html(
       });
       updateForces(idx);
       scrub.value = idx;
-      timeLabel.textContent = (marker.time[idx] || 0).toFixed(3) + ' s';
       setMixerToFrame(idx);
+      const shownTime = marker.time.length
+        ? (marker.time[idx] || 0)
+        : (glbDuration && timelineFrames > 1 ? (idx / (timelineFrames - 1)) * glbDuration : 0);
+      timeLabel.textContent = shownTime.toFixed(3) + ' s';
     }
     function resizeRenderer() {
       const rect = canvas.parentElement.getBoundingClientRect();
@@ -1896,6 +1944,11 @@ def _write_visualizer_html(
 
     const loader = new GLTFLoader();
     let mixer = null, glbDuration = 0, glbRoot = null;
+    function syncTimeline() {
+      timelineFrames = marker.frames.length || (glbDuration > 0 ? 300 : 1);
+      scrub.max = Math.max(0, timelineFrames - 1);
+      if (idx >= timelineFrames) idx = 0;
+    }
     function disposeObject(obj) {
       obj.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
@@ -1921,6 +1974,7 @@ def _write_visualizer_html(
         mixer = gltf.animations.length ? new THREE.AnimationMixer(glbRoot) : null;
         glbDuration = gltf.animations[0]?.duration || 0;
         if (mixer) mixer.clipAction(gltf.animations[0]).play();
+        syncTimeline();
         rebuildModelSkeleton();
         modelGroup.visible = true;
         modelSkeletonGroup.visible = true;
@@ -1934,9 +1988,14 @@ def _write_visualizer_html(
       });
     }
     function setMixerToFrame(i) {
-      if (!mixer || !glbDuration || marker.time.length < 2) return;
-      const t0 = marker.time[0], t1 = marker.time[marker.time.length - 1];
-      const frac = t1 > t0 ? (marker.time[i] - t0) / (t1 - t0) : 0;
+      if (!mixer || !glbDuration) return;
+      let frac = 0;
+      if (marker.time.length >= 2) {
+        const t0 = marker.time[0], t1 = marker.time[marker.time.length - 1];
+        frac = t1 > t0 ? (marker.time[i] - t0) / (t1 - t0) : 0;
+      } else {
+        frac = timelineFrames > 1 ? i / (timelineFrames - 1) : 0;
+      }
       mixer.setTime(Math.max(0, Math.min(glbDuration, frac * glbDuration)));
       modelGroup.updateMatrixWorld(true);
       updateModelSkeleton();
@@ -2050,7 +2109,7 @@ def _write_visualizer_html(
     function animate(now) {
       requestAnimationFrame(animate);
       resizeRenderer();
-      if (playing && marker.frames.length) {
+      if (playing && timelineFrames) {
         if (!lastTick) lastTick = now;
         const elapsed = now - lastTick;
         const stepMs = 45 / Number(speedSelect.value || 1);

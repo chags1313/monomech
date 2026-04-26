@@ -11,6 +11,9 @@ def test_public_api():
     assert hasattr(mm, "external")
     assert hasattr(mm, "save_opensim_animation")
     assert hasattr(mm, "save_ik_animation")
+    assert hasattr(mm, "pose_to_trc")
+    assert hasattr(mm, "markers_to_id")
+    assert hasattr(mm, "video_to_id")
 
 
 def test_native_dependencies_are_optional():

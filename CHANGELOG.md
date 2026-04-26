@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.15.5
+
+### Added
+- added one-line `pose_to_trc()`, `markers_to_id()`, and `video_to_id()` pipeline helpers
+
+### Fixed
+- resolved common full-body OpenSim geometry filename variants so leg and spine meshes export into GLB animations
+- made the GitHub Pages visualizer start empty and wait for user-uploaded GLB files
+
 ## 0.15.3
 
 ### Added

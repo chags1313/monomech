@@ -1,18 +1,16 @@
 # Online Visualizer
 
-Use the browser visualizer to inspect a monomech `.glb` animation without installing Python. The file stays in your browser; it is not uploaded to a server.
+Use the browser visualizer to inspect a monomech `.glb` animation without installing Python. The page starts empty and waits for a file you choose. The file stays in your browser; it is not uploaded to a server.
 
 [Open the GLB visualizer](assets/visualizer.html){ .md-button .md-button--primary }
 
 ## What It Shows
 
 - animated OpenSim mesh playback from a monomech-exported GLB
-- model markers and marker connections when marker data is embedded in an exported dashboard
-- external-force arrows when external-load data is present
-- complete IK coordinate traces
-- complete inverse-dynamics traces
+- playback controls, timeline scrubbing, orbit controls, and model visibility controls
+- marker, force, IK, and ID panels when those data are embedded in an exported monomech dashboard
 
-For a full exported dashboard, create it from Python:
+For a full exported dashboard with synchronized markers, external forces, IK plots, and ID plots, create it from Python:
 
 ```python
 viewer = mm.save_opensim_visualizer(
@@ -24,4 +22,3 @@ viewer = mm.save_opensim_visualizer(
     glb_path=animation.glb_path,
 )
 ```
-

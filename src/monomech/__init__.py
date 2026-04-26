@@ -26,6 +26,16 @@ from .external import ExternalLoadsSpec, external
 from .io.model import build_marker_map, inspect_model_markers
 from .io.trc import load_marker_dataframe, load_trc
 from .io.video import load_video, load_videos
+from .pipeline import (
+    MarkerToIDResult,
+    VideoToIDResult,
+    estimate_loads_from_pose,
+    load_trc_to_id,
+    markers_to_id,
+    pose_to_trc,
+    trc_to_id,
+    video_to_id,
+)
 from .resources import (
     builtin_osim_model_path,
     builtin_pose_model_path,
@@ -42,7 +52,15 @@ __all__ = [
     "MarkerTrial",
     "Study",
     "ExternalLoadsSpec",
+    "MarkerToIDResult",
+    "VideoToIDResult",
     "external",
+    "pose_to_trc",
+    "markers_to_id",
+    "trc_to_id",
+    "load_trc_to_id",
+    "video_to_id",
+    "estimate_loads_from_pose",
     "OpenSimAnimationResult",
     "OpenSimVisualizerResult",
     "extract_opensim_marker_positions",

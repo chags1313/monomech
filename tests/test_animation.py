@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 import monomech as mm
+from monomech.animation import _geometry_file_aliases
 
 
 def test_animation_viewer_uses_relative_glb(tmp_path):
@@ -114,3 +115,11 @@ def test_visualizer_keeps_all_storage_signals(tmp_path):
     assert "coord_0" in text
     assert "coord_19" in text
     assert "All signals (${cols.length})" in text
+
+
+def test_geometry_aliases_cover_full_body_model_variants():
+    assert "r_femur.vtp" in _geometry_file_aliases("femur_r.vtp")
+    assert "l_tibia.vtp" in _geometry_file_aliases("tibia_lv.vtp")
+    assert "r_talus.vtp" in _geometry_file_aliases("talus_rv.vtp")
+    assert "hat_spine.vtp" in _geometry_file_aliases("thoracic1_s.vtp")
+    assert "hat_spine.vtp" in _geometry_file_aliases("lumbar5.vtp")

@@ -24,7 +24,7 @@ Configure the PyPI project with:
 - owner: `chags1313`
 - repository: `monomech`
 - workflow filename: `publish.yml`
-- environment: blank, unless the workflow is changed to use an environment
+- environment: `pypi`
 
 If PyPI reports `invalid-pending-publisher` for an existing project, configure the Trusted Publisher on the existing PyPI project rather than creating a pending publisher for a new project.
 
@@ -55,6 +55,7 @@ On macOS/Linux, activate the environment with `source .venv-smoke/bin/activate` 
 | Failure | Meaning | Fix |
 | --- | --- | --- |
 | `invalid-pending-publisher` | PyPI project does not trust this workflow | Add or update the Trusted Publisher on PyPI |
+| `invalid-publisher` with `environment: MISSING` | PyPI expects a GitHub environment claim | Keep `environment: pypi` on the publish job and configure the PyPI publisher with environment `pypi` |
 | file already exists | version was already uploaded | bump `pyproject.toml` and tag a new version |
 | metadata validation failed | package metadata is invalid | run `python -m build` locally and inspect output |
 | build succeeds but publish does not run | push was not a `v*` tag | create and push a version tag |

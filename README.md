@@ -61,7 +61,7 @@ pose3d_global.to_trc(output_dir / "subject01_global.trc")
 Or run the common video export path in one call:
 
 ```python
-run = mm.pose_to_trc(video_path, output_dir=output_dir)
+run = mm.video_to_trc(video_path, output_dir=output_dir)
 
 print(run.csv_paths)
 print(run.trc_path)
@@ -72,7 +72,7 @@ print(run.trc_path)
 ```python
 import monomech as mm
 
-result = mm.video_to_id(
+result = mm.video_to_inverse_dynamics(
     "data/subject01.mp4",
     model_path="models/subject01_scaled.osim",
     geom_dir="models/FullBodyModel-4.0/Geometry",
@@ -89,7 +89,7 @@ print(result.visualizer.html_path)
 If you already have marker data in a TRC file, start at OpenSim:
 
 ```python
-result = mm.markers_to_id(
+result = mm.trc_to_inverse_dynamics(
     "outputs/subject01/subject01.trc",
     model_path="models/subject01_scaled.osim",
     output_dir="outputs/subject01/opensim",
@@ -208,8 +208,8 @@ Add `--opensim` when OpenSim-compatible bindings are installed.
 GitHub Actions builds distributions on every push to `main`. PyPI publishing goes directly to PyPI through trusted publishing and is triggered by version tags such as:
 
 ```bash
-git tag v0.15.5
-git push origin v0.15.5
+git tag v0.15.6
+git push origin v0.15.6
 ```
 
 The publish workflow can also be run manually from GitHub Actions with the `publish` input set to `true`.

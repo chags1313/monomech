@@ -21,7 +21,7 @@ from .utils import ensure_dir
 
 
 @dataclass(slots=True)
-class MarkerToIDResult:
+class InverseDynamicsPipelineResult:
     """Results from TRC markers through OpenSim IK and inverse dynamics."""
 
     trc_path: Path
@@ -32,7 +32,7 @@ class MarkerToIDResult:
 
 
 @dataclass(slots=True)
-class VideoToIDResult:
+class VideoInverseDynamicsResult:
     """Results from video pose through TRC, IK, inverse dynamics, and optional visualization."""
 
     trial: VideoTrial
@@ -46,7 +46,7 @@ class VideoToIDResult:
     metadata: dict[str, Any] | None = None
 
 
-def pose_to_trc(
+def video_to_trc(
     video_path: str | Path,
     *,
     output_dir: str | Path = "outputs",
@@ -85,7 +85,7 @@ def pose_to_trc(
     return run
 
 
-def markers_to_id(
+def trc_to_inverse_dynamics(
     trc_path: str | Path,
     *,
     model_path: str | Path,
@@ -93,7 +93,7 @@ def markers_to_id(
     external_forces: ExternalLoadsSpec | list[ExternalLoadsSpec] | None = None,
     ik_config: OpenSimIKConfig | None = None,
     id_config: OpenSimIDConfig | None = None,
-) -> MarkerToIDResult:
+) -> InverseDynamicsPipelineResult:
     """Run OpenSim IK and inverse dynamics from a marker TRC in one call."""
 
     trc = Path(trc_path).expanduser().resolve()
@@ -107,7 +107,7 @@ def markers_to_id(
         external_forces=external_forces,
         config=id_config,
     )
-    return MarkerToIDResult(
+    return InverseDynamicsPipelineResult(
         trc_path=trc,
         ik=ik,
         id=inverse_dynamics,
@@ -125,7 +125,7 @@ def markers_to_id(
     )
 
 
-def video_to_id(
+def video_to_inverse_dynamics(
     video_path: str | Path,
     *,
     model_path: str | Path,
@@ -145,7 +145,7 @@ def video_to_id(
     id_config: OpenSimIDConfig | None = None,
     create_animation: bool = True,
     create_visualizer: bool = True,
-) -> VideoToIDResult:
+) -> VideoInverseDynamicsResult:
     """Run the full video-to-inverse-dynamics pipeline in one call."""
 
     trial = load_video(video_path, name=name)
@@ -181,7 +181,7 @@ def video_to_id(
     else:
         loads = external_forces
 
-    marker_id = markers_to_id(
+    marker_id = trc_to_inverse_dynamics(
         pose_run.trc_path,
         model_path=model,
         output_dir=out / "opensim",
@@ -214,7 +214,7 @@ def video_to_id(
             glb_path=None if animation is None else animation.glb_path,
         )
 
-    return VideoToIDResult(
+    return VideoInverseDynamicsResult(
         trial=trial,
         pose=pose_run,
         trc_path=pose_run.trc_path,
@@ -231,10 +231,32 @@ def video_to_id(
     )
 
 
-def trc_to_id(*args, **kwargs) -> MarkerToIDResult:
-    """Alias for `markers_to_id()`."""
+MarkerToIDResult = InverseDynamicsPipelineResult
+VideoToIDResult = VideoInverseDynamicsResult
 
-    return markers_to_id(*args, **kwargs)
+
+def pose_to_trc(*args, **kwargs) -> PipelineRun:
+    """Alias for `video_to_trc()`."""
+
+    return video_to_trc(*args, **kwargs)
+
+
+def markers_to_id(*args, **kwargs) -> InverseDynamicsPipelineResult:
+    """Alias for `trc_to_inverse_dynamics()`."""
+
+    return trc_to_inverse_dynamics(*args, **kwargs)
+
+
+def video_to_id(*args, **kwargs) -> VideoInverseDynamicsResult:
+    """Alias for `video_to_inverse_dynamics()`."""
+
+    return video_to_inverse_dynamics(*args, **kwargs)
+
+
+def trc_to_id(*args, **kwargs) -> InverseDynamicsPipelineResult:
+    """Alias for `trc_to_inverse_dynamics()`."""
+
+    return trc_to_inverse_dynamics(*args, **kwargs)
 
 
 def load_trc_to_id(
@@ -245,11 +267,11 @@ def load_trc_to_id(
     external_forces: ExternalLoadsSpec | list[ExternalLoadsSpec] | None = None,
     ik_config: OpenSimIKConfig | None = None,
     id_config: OpenSimIDConfig | None = None,
-) -> MarkerToIDResult:
+) -> InverseDynamicsPipelineResult:
     """Load a TRC, validate it as markers, then run IK and ID."""
 
     load_trc(trc_path)
-    return markers_to_id(
+    return trc_to_inverse_dynamics(
         trc_path,
         model_path=model_path,
         output_dir=output_dir,

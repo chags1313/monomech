@@ -7,7 +7,7 @@ The pipeline helpers run the common workflows in one call while still returning 
 ```python
 import monomech as mm
 
-run = mm.pose_to_trc(
+run = mm.video_to_trc(
     "data/subject01.mp4",
     output_dir="outputs/subject01",
     sample_fps=30,
@@ -30,12 +30,12 @@ The returned `PipelineRun` can contain:
 
 ## TRC Markers To Inverse Dynamics
 
-Use `markers_to_id()` when you already have an OpenSim-ready TRC:
+Use `trc_to_inverse_dynamics()` when you already have an OpenSim-ready TRC:
 
 ```python
 import monomech as mm
 
-result = mm.markers_to_id(
+result = mm.trc_to_inverse_dynamics(
     "outputs/subject01/subject01.trc",
     model_path="models/subject01_scaled.osim",
     output_dir="outputs/subject01/opensim",
@@ -58,7 +58,7 @@ loads = mm.external.from_csv(
     name="right_grf",
 )
 
-result = mm.markers_to_id(
+result = mm.trc_to_inverse_dynamics(
     "outputs/subject01/subject01.trc",
     model_path="models/subject01_scaled.osim",
     output_dir="outputs/subject01/opensim",
@@ -68,12 +68,12 @@ result = mm.markers_to_id(
 
 ## Video To Inverse Dynamics
 
-Use `video_to_id()` for the complete path from video to pose, TRC, IK, ID, optional GLB, and an HTML visualizer:
+Use `video_to_inverse_dynamics()` for the complete path from video to pose, TRC, IK, ID, optional GLB, and an HTML visualizer:
 
 ```python
 import monomech as mm
 
-result = mm.video_to_id(
+result = mm.video_to_inverse_dynamics(
     "data/subject01.mp4",
     model_path="models/subject01_scaled.osim",
     geom_dir="models/FullBodyModel-4.0/Geometry",
@@ -87,7 +87,7 @@ print(result.id.path)
 print(result.visualizer.html_path)
 ```
 
-By default, `video_to_id()` uses estimated bilateral ground-reaction forces from the pose result. Use measured force-plate data for quantitative kinetics, or pass `external_forces=None` to run ID without external loads as a setup check.
+By default, `video_to_inverse_dynamics()` uses estimated bilateral ground-reaction forces from the pose result. Use measured force-plate data for quantitative kinetics, or pass `external_forces=None` to run ID without external loads as a setup check.
 
 ## What To Inspect At Each Stop
 
@@ -103,6 +103,6 @@ By default, `video_to_id()` uses estimated bilateral ground-reaction forces from
 
 ## When To Use It
 
-Use `pose_to_trc()` for repeatable video-to-TRC processing once you know the settings you want.
+Use `video_to_trc()` for repeatable video-to-TRC processing once you know the settings you want.
 
-Use `markers_to_id()` when your input is already a TRC. Use `video_to_id()` when you want the complete video-to-ID path in one line. Use individual stage methods when you are exploring data, debugging model fit, tuning smoothing/export settings, or adding external loads for inverse dynamics.
+Use `trc_to_inverse_dynamics()` when your input is already a TRC. Use `video_to_inverse_dynamics()` when you want the complete video-to-ID path in one line. Use individual stage methods when you are exploring data, debugging model fit, tuning smoothing/export settings, or adding external loads for inverse dynamics.

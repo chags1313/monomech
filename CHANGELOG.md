@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.15.6
+
+### Added
+- added production pipeline names: `video_to_trc()`, `trc_to_inverse_dynamics()`, and `video_to_inverse_dynamics()`
+
+### Fixed
+- removed duplicate body geometry and repeated shared spine aliases from OpenSim GLB exports
+
 ## 0.15.5
 
 ### Added

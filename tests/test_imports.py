@@ -14,6 +14,9 @@ def test_public_api():
     assert hasattr(mm, "pose_to_trc")
     assert hasattr(mm, "markers_to_id")
     assert hasattr(mm, "video_to_id")
+    assert hasattr(mm, "video_to_trc")
+    assert hasattr(mm, "trc_to_inverse_dynamics")
+    assert hasattr(mm, "video_to_inverse_dynamics")
 
 
 def test_native_dependencies_are_optional():

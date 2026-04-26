@@ -324,7 +324,32 @@ def _parse_geometry(osim_path: Path) -> list[dict[str, Any]]:
                     }
                 )
                 seen.add(key)
-    return specs
+    return _dedupe_geometry_specs(specs)
+
+
+def _dedupe_geometry_specs(specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    body_owned_meshes = {spec["mesh_file"] for spec in specs if spec.get("body_owner")}
+    out: list[dict[str, Any]] = []
+    seen: set[tuple[str | None, str | None, str, tuple[float, ...] | None]] = set()
+    for spec in specs:
+        if (
+            spec.get("body_owner") is None
+            and spec.get("frame_path") is None
+            and spec["mesh_file"] in body_owned_meshes
+        ):
+            continue
+        scale = spec.get("scale")
+        key = (
+            spec.get("body_owner"),
+            spec.get("frame_path"),
+            spec["mesh_file"],
+            None if scale is None else tuple(float(v) for v in scale),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(spec)
+    return out
 
 
 def _resolve_geometry_dirs(osim_path: Path, geom_dir: str | Path | None) -> list[Path]:
@@ -364,6 +389,10 @@ def _find_geometry_file(mesh_file: str, geometry_dirs: list[Path]) -> Path | Non
         if resolved.is_file():
             return resolved
     return None
+
+
+def _is_alias_resolution(mesh_file: str, resolved_path: Path) -> bool:
+    return Path(mesh_file).name.lower() != resolved_path.name.lower()
 
 
 def _geometry_file_aliases(filename: str) -> list[str]:
@@ -813,11 +842,19 @@ def save_opensim_animation(
 
     items = []
     missing_geometry = []
+    alias_resolutions: set[Path] = set()
+    duplicate_alias_geometry = []
     for spec in _parse_geometry(osim_path):
         mesh_path = _find_geometry_file(spec["mesh_file"], geometry_dirs)
         if mesh_path is None:
             missing_geometry.append(spec["mesh_file"])
             continue
+        if _is_alias_resolution(spec["mesh_file"], mesh_path):
+            resolved = mesh_path.resolve()
+            if resolved in alias_resolutions:
+                duplicate_alias_geometry.append(spec["mesh_file"])
+                continue
+            alias_resolutions.add(resolved)
         frame = None
         frame_path = (spec.get("frame_path") or "").split("/")[-1].lower()
         if frame_path in name_to_body:
@@ -1131,6 +1168,7 @@ def save_opensim_animation(
         "time_range": [float(times[0]), float(times[-1])],
         "unmatched_coordinates": unmatched_coordinates,
         "missing_geometry": sorted(set(missing_geometry)),
+        "duplicate_alias_geometry": sorted(set(duplicate_alias_geometry)),
         "dropped_static_nodes": dropped_static_nodes,
         "dropped_origin_nodes": dropped_origin_nodes,
         "id_summary": id_summary,

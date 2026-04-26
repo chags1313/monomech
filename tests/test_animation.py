@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 import monomech as mm
-from monomech.animation import _geometry_file_aliases
+from monomech.animation import _dedupe_geometry_specs, _geometry_file_aliases
 
 
 def test_animation_viewer_uses_relative_glb(tmp_path):
@@ -123,3 +123,25 @@ def test_geometry_aliases_cover_full_body_model_variants():
     assert "r_talus.vtp" in _geometry_file_aliases("talus_rv.vtp")
     assert "hat_spine.vtp" in _geometry_file_aliases("thoracic1_s.vtp")
     assert "hat_spine.vtp" in _geometry_file_aliases("lumbar5.vtp")
+
+
+def test_geometry_specs_prefer_body_owned_meshes():
+    specs = [
+        {
+            "mesh_file": "femur_r.vtp",
+            "frame_path": None,
+            "body_owner": None,
+            "scale": None,
+        },
+        {
+            "mesh_file": "femur_r.vtp",
+            "frame_path": None,
+            "body_owner": "femur_r",
+            "scale": None,
+        },
+    ]
+
+    kept = _dedupe_geometry_specs(specs)
+
+    assert len(kept) == 1
+    assert kept[0]["body_owner"] == "femur_r"

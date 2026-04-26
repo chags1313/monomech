@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.15.2
+
 ### Added
 - added OpenSim IK animation export to GLB with optional ID metadata, marker-position output, and an HTML viewer helper
 

@@ -196,7 +196,7 @@ def video_to_inverse_dynamics(
     if marker_id.id.metadata:
         external_loads_path = marker_id.id.metadata.get("external_loads_mot_path")
 
-    if create_animation and geom_dir is not None:
+    if create_animation:
         animation = save_opensim_animation(
             osim_path=model,
             geom_dir=geom_dir,

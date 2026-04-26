@@ -17,6 +17,7 @@ def test_public_api():
     assert hasattr(mm, "video_to_trc")
     assert hasattr(mm, "trc_to_inverse_dynamics")
     assert hasattr(mm, "video_to_inverse_dynamics")
+    assert hasattr(mm, "get_builtin_geometry_dir")
 
 
 def test_native_dependencies_are_optional():

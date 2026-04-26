@@ -18,3 +18,11 @@ def test_builtin_osim_model_can_include_original_geometry(tmp_path: Path):
     text = model_path.read_text(encoding="utf-8")
     assert model_path.name == "Mediapipe.osim"
     assert "<Mesh" in text
+
+
+def test_builtin_geometry_dir_is_available(tmp_path: Path):
+    geometry_dir = mm.get_builtin_geometry_dir(extract_dir=tmp_path)
+
+    assert geometry_dir.is_dir()
+    assert (geometry_dir / "hat_spine.vtp").is_file()
+    assert (geometry_dir / "r_femur.vtp").is_file()

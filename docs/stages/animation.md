@@ -23,14 +23,13 @@ result = mm.save_opensim_animation(
     osim_path="outputs/subject01/scale/subject01_scaled.osim",
     mot_path="outputs/subject01/ik/subject01_ik.mot",
     out_glb_path="outputs/subject01/animation/subject01_motion.glb",
-    geom_dir="Geometry",
 )
 
 print(result.glb_path)
 print(result.metadata["node_count"])
 ```
 
-If `geom_dir` is omitted, `monomech` looks next to the model for `Geometry/`, `geometry/`, and then the model directory itself. For full-body models downloaded from zip archives, make sure this points at the real mesh folder, not a `__MACOSX` metadata folder. A good folder contains real `.vtp`, `.obj`, or `.stl` mesh files, not tiny `._name.vtp` files.
+If `geom_dir` is omitted, `monomech` first uses its packaged full-body geometry, then looks next to the model for `Geometry/`, `geometry/`, and the model directory itself. Pass `geom_dir` only when using a custom model or mesh folder. For full-body models downloaded from zip archives, make sure this points at the real mesh folder, not a `__MACOSX` metadata folder. A good folder contains real `.vtp`, `.obj`, or `.stl` mesh files, not tiny `._name.vtp` files.
 
 ## IK And ID Together
 
@@ -87,7 +86,6 @@ animation = mm.save_opensim_animation(
     osim_path=scale.scaled_model_path,
     mot_path=ik.path,
     id_path=id_result.path,
-    geom_dir="models/FullBodyModel-4.0/Geometry",
     out_glb_path="outputs/subject01/animation/subject01_ik_id.glb",
     stride=2,
     decimate_target_reduction=0.35,
@@ -105,7 +103,8 @@ The GLB exporter uses the OpenSim model file for body transforms and the geometr
 | Real mesh files are present | Open the folder and confirm files such as `r_pelvis.vtp`, `femur_r.vtp`, or similar are normal-sized files. |
 | Avoid `__MACOSX` folders | Those folders usually contain `._*.vtp` metadata files and are not usable mesh geometry. |
 | Match model and geometry family | Use the `Geometry/` folder that came with the `.osim` model whenever possible. |
-| Pass `geom_dir` explicitly | Do this when the model and meshes are not next to each other. |
+| Packaged geometry | The default full-body meshes are included with `monomech`. |
+| Pass `geom_dir` explicitly | Do this when using custom model geometry or a different mesh set. |
 | Start with a preview export | Use `stride=3` and `decimate_target_reduction=0.5`, then lower those settings for final review. |
 
 ## Marker Positions
@@ -262,7 +261,7 @@ New code should prefer `save_opensim_animation()` because it returns paths, meta
 | Symptom | Fix |
 | --- | --- |
 | Missing optional dependency error | Install `python -m pip install "monomech[animation]"`. |
-| No geometry is exported | Pass `geom_dir=` pointing at the OpenSim `Geometry` folder. |
+| No geometry is exported | Confirm the model uses compatible mesh names, or pass `geom_dir=` for a custom OpenSim geometry folder. |
 | GLB contains unresolved parts at the origin | Try `drop_origin_nodes=True` for diagnostic exports, then inspect `result.metadata["missing_geometry"]` and the geometry folder path. |
 | Animation looks too slow or too fast | Check the IK MOT time column and selected `t_start`, `t_end`, and `stride`. |
 | File is too large | Increase `stride`, use keyframe thinning, or set `decimate_target_reduction`. |

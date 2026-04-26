@@ -44,6 +44,7 @@ from .pipeline import (
 from .resources import (
     builtin_osim_model_path,
     builtin_pose_model_path,
+    get_builtin_geometry_dir,
     get_builtin_osim_model,
     list_builtin_osim_models,
 )
@@ -95,6 +96,7 @@ __all__ = [
     "GapFillConfig",
     "builtin_osim_model_path",
     "builtin_pose_model_path",
+    "get_builtin_geometry_dir",
     "builtin_osim_model_path",
     "builtin_pose_model_path",
     "get_builtin_osim_model",

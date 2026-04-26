@@ -76,7 +76,6 @@ import monomech as mm
 result = mm.video_to_inverse_dynamics(
     "data/subject01.mp4",
     model_path="models/subject01_scaled.osim",
-    geom_dir="models/FullBodyModel-4.0/Geometry",
     output_dir="outputs/subject01",
     body_mass_kg=75.0,
 )

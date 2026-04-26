@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "monomech"
-version = "0.15.6"
+version = "0.15.7"
 description = "Single camera biomechanics library"
 readme = "README.md"
 license = "MIT"
@@ -76,6 +76,7 @@ where = ["src"]
 monomech = [
   "data/*.osim",
   "data/*.task",
+  "data/Geometry/*.vtp",
   "py.typed",
 ]
 

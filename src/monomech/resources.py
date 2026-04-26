@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
-from importlib.resources import as_file, files
-from pathlib import Path
 import shutil
 import tempfile
 import xml.etree.ElementTree as ET
-from typing import Iterator
-
+from collections.abc import Iterator
+from contextlib import contextmanager
+from importlib.resources import as_file, files
+from pathlib import Path
 
 _BUILTIN_OSIM_MODELS = {
     "pose": "Mediapipe.osim",
@@ -57,7 +56,10 @@ def get_builtin_osim_model(
         extract_dir = Path(extract_dir)
 
     extract_dir.mkdir(parents=True, exist_ok=True)
-    resolved_filename = filename if include_geometry else f"{Path(filename).stem}_nogeometry{Path(filename).suffix}"
+    model_name = Path(filename)
+    resolved_filename = (
+        filename if include_geometry else f"{model_name.stem}_nogeometry{model_name.suffix}"
+    )
     out_path = extract_dir / resolved_filename
 
     if not out_path.exists():
@@ -68,6 +70,34 @@ def get_builtin_osim_model(
             _strip_opensim_mesh_geometry(out_path)
 
     return out_path
+
+
+def get_builtin_geometry_dir(*, extract_dir: str | Path | None = None) -> Path:
+    """Return a stable filesystem path to packaged OpenSim display geometry."""
+
+    if extract_dir is None:
+        extract_dir = Path(tempfile.gettempdir()) / "monomech_models"
+    else:
+        extract_dir = Path(extract_dir)
+    out_dir = extract_dir / "Geometry"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    resource_dir = files("monomech.data") / "Geometry"
+    copied_any = False
+    for resource in resource_dir.iterdir():
+        if not resource.name.lower().endswith(".vtp"):
+            continue
+        out_path = out_dir / resource.name
+        if out_path.exists():
+            copied_any = True
+            continue
+        with as_file(resource) as src:
+            shutil.copy2(src, out_path)
+        copied_any = True
+
+    if not copied_any:
+        raise FileNotFoundError("No packaged OpenSim geometry files were found.")
+    return out_dir
 
 
 def _strip_opensim_mesh_geometry(path: str | Path) -> None:

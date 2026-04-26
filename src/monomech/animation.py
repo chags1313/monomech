@@ -356,6 +356,13 @@ def _resolve_geometry_dirs(osim_path: Path, geom_dir: str | Path | None) -> list
     candidates: list[Path] = []
     if geom_dir is not None:
         candidates.append(Path(geom_dir).expanduser().resolve())
+    else:
+        try:
+            from .resources import get_builtin_geometry_dir
+
+            candidates.append(get_builtin_geometry_dir())
+        except Exception:
+            pass
     candidates.extend(
         [
             osim_path.parent / "Geometry",
@@ -393,6 +400,16 @@ def _find_geometry_file(mesh_file: str, geometry_dirs: list[Path]) -> Path | Non
 
 def _is_alias_resolution(mesh_file: str, resolved_path: Path) -> bool:
     return Path(mesh_file).name.lower() != resolved_path.name.lower()
+
+
+def _geometry_spec_export_priority(spec: dict[str, Any]) -> tuple[int, str]:
+    mesh_name = Path(str(spec.get("mesh_file", ""))).stem.lower()
+    body = str(spec.get("body_owner") or "").lower()
+    if mesh_name.startswith(("thoracic", "cerv")) or body == "torso":
+        return (0, mesh_name)
+    if mesh_name.startswith("lumbar"):
+        return (20, mesh_name)
+    return (10, mesh_name)
 
 
 def _geometry_file_aliases(filename: str) -> list[str]:
@@ -802,6 +819,11 @@ def save_opensim_animation(
     geometry_dirs = _resolve_geometry_dirs(osim_path, geom_dir)
     if geom_dir is not None and not Path(geom_dir).expanduser().resolve().is_dir():
         raise FileNotFoundError(f"Geometry directory not found: {geom_dir}")
+    for geometry_dir in geometry_dirs:
+        try:
+            osim.ModelVisualizer.addDirToGeometrySearchPaths(str(geometry_dir))
+        except Exception:
+            pass
 
     stride = max(1, int(stride))
     degree_to_rad = np.pi / 180.0
@@ -844,7 +866,7 @@ def save_opensim_animation(
     missing_geometry = []
     alias_resolutions: set[Path] = set()
     duplicate_alias_geometry = []
-    for spec in _parse_geometry(osim_path):
+    for spec in sorted(_parse_geometry(osim_path), key=_geometry_spec_export_priority):
         mesh_path = _find_geometry_file(spec["mesh_file"], geometry_dirs)
         if mesh_path is None:
             missing_geometry.append(spec["mesh_file"])

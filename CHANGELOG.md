@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.15.7
+
+### Added
+- packaged default full-body OpenSim geometry and automatic geometry discovery for animation exports
+- added `get_builtin_geometry_dir()` for workflows that need the packaged mesh directory
+
+### Fixed
+- preferred torso/thoracic attachment for the shared packaged spine mesh
+
 ## 0.15.6
 
 ### Added

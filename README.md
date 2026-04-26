@@ -75,7 +75,6 @@ import monomech as mm
 result = mm.video_to_inverse_dynamics(
     "data/subject01.mp4",
     model_path="models/subject01_scaled.osim",
-    geom_dir="models/FullBodyModel-4.0/Geometry",
     output_dir="outputs/subject01",
     body_mass_kg=75.0,
 )
@@ -107,7 +106,6 @@ animation = mm.save_opensim_animation(
     osim_path="models/subject01_scaled.osim",
     mot_path=result.ik.path,
     id_path=result.id.path,
-    geom_dir="models/FullBodyModel-4.0/Geometry",
     out_glb_path="outputs/subject01/animation/subject01_ik_id.glb",
     stride=2,
     decimate_target_reduction=0.35,
@@ -135,7 +133,7 @@ The dashboard is a standalone HTML file, so it works in notebooks, local browser
 
 The GitHub Pages site includes an online GLB visualizer for quick review: [chags1313.github.io/monomech/visualizer/](https://chags1313.github.io/monomech/visualizer/).
 
-Geometry note: pass `geom_dir` to the real OpenSim `Geometry/` folder. If your model came from a macOS-created zip, avoid the `__MACOSX` folder because it usually contains only tiny `._*.vtp` metadata files, not usable meshes.
+Geometry note: the default full-body geometry is packaged with `monomech`, so most users do not need to pass `geom_dir`. Pass `geom_dir` only when using a different OpenSim model or custom mesh folder. If your model came from a macOS-created zip, avoid the `__MACOSX` folder because it usually contains only tiny `._*.vtp` metadata files, not usable meshes.
 
 For measured force plates, build an external-load spec from your force table:
 
@@ -208,8 +206,8 @@ Add `--opensim` when OpenSim-compatible bindings are installed.
 GitHub Actions builds distributions on every push to `main`. PyPI publishing goes directly to PyPI through trusted publishing and is triggered by version tags such as:
 
 ```bash
-git tag v0.15.6
-git push origin v0.15.6
+git tag v0.15.7
+git push origin v0.15.7
 ```
 
 The publish workflow can also be run manually from GitHub Actions with the `publish` input set to `true`.

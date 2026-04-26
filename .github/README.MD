@@ -6,7 +6,7 @@ It is designed for researchers, clinicians, and biomechanists who want a practic
 
 - **video → 2D pose → 3D pose → TRC → OpenSim scale / IK / ID**
 - or from:
-- **marker TRC → cleaning → OpenSim scale / IK / ID**
+- **marker TRC → cleaning → OpenSim scale / IK /ID**
 
 MonoMech is built to be:
 

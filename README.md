@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/chags1313/monomech/actions/workflows/ci.yml/badge.svg)](https://github.com/chags1313/monomech/actions/workflows/ci.yml)
 [![Docs](https://github.com/chags1313/monomech/actions/workflows/docs.yml/badge.svg)](https://github.com/chags1313/monomech/actions/workflows/docs.yml)
-[![Pages](https://github.com/chags1313/monomech/actions/workflows/pages.yml/badge.svg)](https://github.com/chags1313/monomech/actions/workflows/pages.yml)
+[![Pages](https://github.com/chags1313/monomech/actions/workflows/docs.yml/badge.svg)](https://github.com/chags1313/monomech/actions/workflows/docs.yml)
 
 `monomech` is a notebook-first Python library for single-camera biomechanics workflows. It helps you move from video or marker data into inspectable pose results, OpenSim-ready files, and analysis-friendly tables without hiding the intermediate steps.
 
@@ -98,11 +98,11 @@ Each notebook keeps paths at the top and separates inspection, export, and downs
 
 ## Documentation Map
 
-- [Getting started](https://chags1313.github.io/monomech/getting-started/)
-- [Example notebooks](https://chags1313.github.io/monomech/examples/)
-- [Outputs and files](https://chags1313.github.io/monomech/outputs/)
-- [OpenSim stage guide](https://chags1313.github.io/monomech/stages/opensim/)
-- [Publishing guide](https://chags1313.github.io/monomech/PUBLISHING/)
+- [Getting started](https://chags1313.github.io/monomech/docs/getting-started.html)
+- [Example notebooks](https://chags1313.github.io/monomech/docs/examples.html)
+- [Outputs and files](https://chags1313.github.io/monomech/docs/outputs.html)
+- [OpenSim stage guide](https://chags1313.github.io/monomech/docs/stages/opensim.html)
+- [Publishing guide](https://chags1313.github.io/monomech/docs/PUBLISHING.html)
 
 ## OpenSim Workflow
 

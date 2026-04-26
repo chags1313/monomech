@@ -29,4 +29,5 @@ htmlcov/
 Thumbs.db
 
 # Local outputs
-outputs/
+outputs/*
+!outputs/index.html

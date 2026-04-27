@@ -3,13 +3,10 @@
 The global pose stage converts world landmarks into a floor-aligned representation that can be exported to CSV or TRC.
 
 ```python
-trial = mm.load_video("subject01.mp4")
-trial.estimate_pose2d()
-trial.estimate_pose3d_world()
-
-pose3d_global = trial.estimate_pose3d_global(
-    floor_method="auto",
-    translation_method="pnp",
+pose3d_global = mm.estimate_pose(
+    "subject01.mp4",
+    root_centered=False,
+    floored=True,
 )
 ```
 
@@ -28,7 +25,7 @@ config = mm.Pose3DGlobalConfig(
     smooth_root=True,
 )
 
-pose3d_global = trial.estimate_pose3d_global(config=config)
+pose3d_global = mm.estimate_pose("subject01.mp4", global_config=config)
 ```
 
 ## Common Uses

@@ -48,11 +48,8 @@ video_path = Path("data/subject01.mp4")
 output_dir = Path("outputs/subject01")
 output_dir.mkdir(parents=True, exist_ok=True)
 
-trial = mm.load_video(video_path)
-
-pose2d = trial.estimate_pose2d()
-pose3d_world = trial.estimate_pose3d_world()
-pose3d_global = trial.estimate_pose3d_global()
+pose3d_global = mm.estimate_pose(video_path, root_centered=False, floored=True)
+pose3d_global = mm.gap_fill(mm.smooth(pose3d_global))
 
 pose3d_global.to_csv(output_dir / "subject01_global.csv")
 pose3d_global.to_trc(output_dir / "subject01_global.trc")
@@ -253,6 +250,7 @@ The `examples/` folder includes ready-to-edit notebooks:
 
 - [Getting started](https://chags1313.github.io/monomech/getting-started/)
 - [Example notebooks](https://chags1313.github.io/monomech/examples/)
+- [API reference](https://chags1313.github.io/monomech/api/)
 - [Online GLB visualizer](https://chags1313.github.io/monomech/visualizer/)
 - [External loads and forces](https://chags1313.github.io/monomech/stages/forces/)
 - [OpenSim scale, IK, and ID](https://chags1313.github.io/monomech/stages/opensim/)
@@ -282,8 +280,8 @@ Add `--opensim` when OpenSim-compatible bindings are installed.
 GitHub Actions builds distributions on every push to `main`. PyPI publishing goes directly to PyPI through trusted publishing and is triggered by version tags such as:
 
 ```bash
-git tag v0.15.10
-git push origin v0.15.10
+git tag v0.15.11
+git push origin v0.15.11
 ```
 
 The publish workflow can also be run manually from GitHub Actions with the `publish` input set to `true`.

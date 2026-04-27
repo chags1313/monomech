@@ -42,31 +42,21 @@ Only run OpenSim after marker names, units, and time ranges look sensible.
 ```python
 import monomech as mm
 
-trial = mm.load_video("data/subject01.mp4")
-run = trial.run_pipeline(export_csv=True, export_trc=True, output_dir="outputs/subject01")
+pose = mm.estimate_pose("data/subject01.mp4")
+pose = mm.gap_fill(mm.smooth(pose))
 
-model_path = mm.get_builtin_osim_model("pose")
-
-scale = trial.run_opensim_scale(
-    model_path=model_path,
-    trc_path=run.trc_path,
+scale = mm.run_scaling(
+    pose,
+    model="pose",
     output_dir="outputs/subject01/scale",
 )
 
-ik = trial.run_opensim_ik(
-    model_path=scale.scaled_model_path,
-    trc_path=run.trc_path,
-    output_dir="outputs/subject01/ik",
-)
+ik = mm.run_ik(scale, output_dir="outputs/subject01/ik")
 
-estimated_loads = mm.external.estimate_grf(
-    pose3d=run.pose3d_global,
-    body_mass_kg=75.0,
-)
+estimated_loads = mm.estimate_grf(pose, body_mass_kg=75.0)
 
-id_result = trial.run_opensim_id(
-    model_path=scale.scaled_model_path,
-    ik_path=ik.path,
+id_result = mm.run_id(
+    ik=ik,
     external_forces=estimated_loads,
     output_dir="outputs/subject01/id",
 )
@@ -97,11 +87,8 @@ video_path = Path("data/subject01.mp4")
 output_dir = Path("outputs/subject01")
 output_dir.mkdir(parents=True, exist_ok=True)
 
-trial = mm.load_video(video_path)
-
-pose2d = trial.estimate_pose2d()
-pose3d_world = trial.estimate_pose3d_world()
-pose3d_global = trial.estimate_pose3d_global()
+pose3d_global = mm.estimate_pose(video_path)
+pose3d_global = mm.gap_fill(mm.smooth(pose3d_global))
 
 pose3d_global.to_csv(output_dir / "subject01_global.csv")
 pose3d_global.to_trc(output_dir / "subject01_global.trc")

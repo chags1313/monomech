@@ -1,6 +1,6 @@
-# OpenSim
+# OpenSim Scale, IK, And ID
 
-OpenSim helpers are available on `VideoTrial` and `MarkerTrial`. They write setup files, run OpenSim tools, read outputs back into result objects, and keep useful paths in metadata.
+OpenSim helpers write setup files, run OpenSim tools, read outputs back into result objects, and keep useful paths in metadata. Use the top-level API for notebooks and scripts, then drop to lower-level trial methods only when you need very specific control.
 
 ## Requirements
 
@@ -16,7 +16,7 @@ You can also use a conda OpenSim installation as long as Python can import an `o
 
 ```mermaid
 flowchart LR
-  A["TRC marker file"] --> B["Scale"]
+  A["Pose, marker result, or TRC"] --> B["Scale"]
   B --> C["Scaled model"]
   C --> D["Inverse kinematics"]
   D --> E["IK coordinates MOT"]
@@ -24,6 +24,8 @@ flowchart LR
   E --> H["Inverse dynamics"]
   G --> H
   H --> I["Generalized forces STO"]
+  E --> J["3D visualizer"]
+  H --> J
 ```
 
 ## Built-In Models
@@ -35,7 +37,7 @@ print(mm.list_builtin_osim_models())
 model_path = mm.get_builtin_osim_model("pose")
 ```
 
-By default, bundled models keep their original mesh display geometry so animation export can resolve the packaged full-body meshes. For headless OpenSim runs where you only want IK/ID and do not need visualization geometry:
+Built-in models keep their display geometry by default so animation export can resolve the packaged full-body meshes. For headless OpenSim runs where you only want IK/ID and do not need visualization geometry:
 
 ```python
 model_path = mm.get_builtin_osim_model("pose", include_geometry=False)
@@ -43,10 +45,15 @@ model_path = mm.get_builtin_osim_model("pose", include_geometry=False)
 
 ## 1. Scale
 
+Start from a pose result, marker result, or TRC path:
+
 ```python
-scale = trial.run_opensim_scale(
-    model_path=model_path,
-    trc_path="outputs/subject01/subject01_global.trc",
+pose = mm.estimate_pose("data/subject01.mp4")
+pose = mm.gap_fill(mm.smooth(pose))
+
+scale = mm.run_scaling(
+    pose,
+    model="pose",
     output_dir="outputs/subject01/scale",
 )
 
@@ -60,9 +67,10 @@ Use a stable subsection when the full trial contains extra movement:
 ```python
 from monomech import OpenSimScaleConfig
 
-scale = trial.run_opensim_scale(
-    model_path=model_path,
-    trc_path=trc_path,
+scale = mm.run_scaling(
+    "outputs/subject01/subject01_global.trc",
+    model=model_path,
+    output_dir="outputs/subject01/scale",
     config=OpenSimScaleConfig(time_window=(0.25, 1.25)),
 )
 ```
@@ -70,15 +78,15 @@ scale = trial.run_opensim_scale(
 ## 2. Inverse Kinematics
 
 ```python
-ik = trial.run_opensim_ik(
-    model_path=scale.scaled_model_path,
-    trc_path=trc_path,
+ik = mm.run_ik(
+    scale,
     output_dir="outputs/subject01/ik",
 )
 
 print(ik.path)
 display(ik.to_dataframe().head())
 print(ik.metadata["marker_error_summary"])
+ik.plot()
 ```
 
 Add marker weights when some markers should matter more:
@@ -86,9 +94,8 @@ Add marker weights when some markers should matter more:
 ```python
 from monomech import OpenSimIKConfig
 
-ik = trial.run_opensim_ik(
-    model_path=scale.scaled_model_path,
-    trc_path=trc_path,
+ik = mm.run_ik(
+    scale,
     config=OpenSimIKConfig(
         marker_weights={
             "right_ankle": 5.0,
@@ -103,10 +110,14 @@ ik = trial.run_opensim_ik(
 Inverse dynamics can run with no external loads for a setup check, but meaningful kinetics usually need measured or estimated external forces.
 
 ```python
-estimated_loads = mm.external.estimate_grf(
-    pose3d=run.pose3d_global,
-    body_mass_kg=75.0,
-)
+estimated_loads = mm.estimate_grf(pose, body_mass_kg=75.0)
+```
+
+For a carried object:
+
+```python
+dumbbell = mm.load(type="carried", body="hand_r", mass_kg=10.0)
+forces = mm.external_forces(loads=[dumbbell, *estimated_loads])
 ```
 
 For measured force data:
@@ -128,15 +139,15 @@ See [External loads and forces](forces.md) for measured force plates, arrays, ma
 ## 4. Inverse Dynamics
 
 ```python
-id_result = trial.run_opensim_id(
-    model_path=scale.scaled_model_path,
-    ik_path=ik.path,
+id_result = mm.run_id(
+    ik=ik,
     external_forces=estimated_loads,
     output_dir="outputs/subject01/id",
 )
 
 print(id_result.path)
 display(id_result.to_dataframe().head())
+id_result.plot()
 ```
 
 Generated external-load files are reported in metadata:
@@ -149,22 +160,20 @@ print(id_result.metadata["coordinate_preflight"])
 
 ## 5. Animation Export
 
-Export the IK motion and optional ID metadata to one portable `.glb` file:
+Create a notebook-ready Three.js visualizer:
 
 ```python
-animation = mm.save_opensim_animation(
-    osim_path=scale.scaled_model_path,
-    mot_path=ik.path,
-    id_path=id_result.path,
-    out_glb_path="outputs/subject01/animation/subject01_ik_id.glb",
-    stride=2,
-    decimate_target_reduction=0.35,
+viewer = mm.animate(
+    ik=ik,
+    id=id_result,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    output_dir="outputs/subject01/visualizer",
 )
 
-print(animation.glb_path)
+viewer.show()
 ```
 
-See [OpenSim animation export](animation.md) for viewer creation, marker-position exports, and file-size controls.
+See [OpenSim animation export](animation.md) for GLB export options, viewer creation, marker-position exports, and file-size controls.
 
 ## Preflight And NaN Handling
 
@@ -191,15 +200,13 @@ Disable automatic fixes when you want strict failures:
 ```python
 from monomech import OpenSimIKConfig, OpenSimIDConfig
 
-ik = trial.run_opensim_ik(
-    model_path=scale.scaled_model_path,
-    trc_path=trc_path,
+ik = mm.run_ik(
+    scale,
     config=OpenSimIKConfig(sanitize_marker_data=False),
 )
 
-id_result = trial.run_opensim_id(
-    model_path=scale.scaled_model_path,
-    ik_path=ik.path,
+id_result = mm.run_id(
+    ik=ik,
     config=OpenSimIDConfig(sanitize_coordinates=False),
 )
 ```
@@ -219,9 +226,8 @@ Set `quiet=False` when you want OpenSim output in the console:
 ```python
 from monomech import OpenSimIKConfig
 
-ik = trial.run_opensim_ik(
-    model_path=scale.scaled_model_path,
-    trc_path=trc_path,
+ik = mm.run_ik(
+    scale,
     config=OpenSimIKConfig(quiet=False),
 )
 ```

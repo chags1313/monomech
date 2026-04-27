@@ -9,6 +9,12 @@ trial = mm.load_video("subject01.mp4")
 pose2d = trial.estimate_pose2d()
 ```
 
+Most users can start with the combined pose helper:
+
+```python
+pose = mm.estimate_pose("subject01.mp4")
+```
+
 ## Requirements
 
 Install the pose extra:
@@ -42,5 +48,5 @@ The returned `Pose2DResult` can be exported or converted to tables:
 
 ```python
 pose2d.to_csv("outputs/subject01_pose2d.csv")
-df = pose2d.to_dataframe()
+df = pose2d.to_wide_df()
 ```

@@ -3,17 +3,13 @@
 `monomech` uses a PnP-style translation option inside the global pose stage when image-space and world landmarks are available.
 
 ```python
-trial = mm.load_video("subject01.mp4")
-
-pose2d = trial.estimate_pose2d()
-pose3d_world = trial.estimate_pose3d_world()
-
-pose3d_global = trial.estimate_pose3d_global(
-    pose2d=pose2d,
-    world_pose=pose3d_world,
-    translation_method="pnp",
+pose3d_global = mm.estimate_pose(
+    "subject01.mp4",
+    global_config=mm.Pose3DGlobalConfig(translation_method="pnp"),
 )
 ```
+
+Use `root_centered=True` in `estimate_pose()` when you want hip-centered translation instead of PnP-based global translation.
 
 ## Fallback Behavior
 

@@ -72,6 +72,7 @@ nav:
   - Online visualizer: visualizer.md
   - Getting started: getting-started.md
   - Examples: examples.md
+  - API reference: api.md
   - Modular stages:
       - Overview: stages/index.md
       - 2D pose: stages/pose2d.md
@@ -83,7 +84,7 @@ nav:
       - OpenSim animation export: stages/animation.md
       - Full video-to-ID pipeline: stages/full-pipeline.md
   - Outputs and files: outputs.md
-  - GATMA model guide: gatma-model.md
+  - Model guide: model-guide.md
   - GitHub and releases:
       - Docs site and Pages: github-pages.md
       - Repository setup: GITHUB_SETUP.md

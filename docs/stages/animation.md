@@ -53,31 +53,21 @@ The GLB stays a single portable file, and the returned result keeps the export s
 ```python
 import monomech as mm
 
-trial = mm.load_video("data/subject01.mp4")
-run = trial.run_pipeline(export_csv=True, export_trc=True, output_dir="outputs/subject01")
+pose = mm.estimate_pose("data/subject01.mp4")
+pose = mm.gap_fill(mm.smooth(pose))
 
-model_path = mm.get_builtin_osim_model("pose")
-
-scale = trial.run_opensim_scale(
-    model_path=model_path,
-    trc_path=run.trc_path,
+scale = mm.run_scaling(
+    pose,
+    model="pose",
     output_dir="outputs/subject01/scale",
 )
 
-ik = trial.run_opensim_ik(
-    model_path=scale.scaled_model_path,
-    trc_path=run.trc_path,
-    output_dir="outputs/subject01/ik",
-)
+ik = mm.run_ik(scale, output_dir="outputs/subject01/ik")
 
-loads = mm.external.estimate_grf(
-    pose3d=run.pose3d_global,
-    body_mass_kg=75.0,
-)
+loads = mm.estimate_grf(pose, body_mass_kg=75.0)
 
-id_result = trial.run_opensim_id(
-    model_path=scale.scaled_model_path,
-    ik_path=ik.path,
+id_result = mm.run_id(
+    ik=ik,
     external_forces=loads,
     output_dir="outputs/subject01/id",
 )

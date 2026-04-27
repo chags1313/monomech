@@ -6,21 +6,19 @@
 
 ```mermaid
 flowchart LR
-    video["Video file"] --> load["mm.load_video"]
-    load --> pose2d["estimate_pose2d"]
-    pose2d --> world["estimate_pose3d_world"]
-    world --> global["estimate_pose3d_global"]
-    global --> csv["CSV export"]
-    global --> trc["TRC export"]
-    trc --> opensim["OpenSim scale / IK / ID"]
+    video["Video file"] --> pose["mm.estimate_pose"]
+    pose --> clean["mm.smooth + mm.gap_fill"]
+    clean --> preview["vis_2d / vis_3d"]
+    clean --> csv["CSV export"]
+    clean --> trc["TRC export"]
+    clean --> opensim["OpenSim scale / IK / ID"]
 ```
 
 ## Marker-First Path
 
 ```mermaid
 flowchart LR
-    trc["TRC file"] --> load["mm.load_trc"]
-    load --> clean["gap fill + smooth"]
+    trc["TRC file"] --> clean["mm.gap_fill + mm.smooth"]
     clean --> export["TRC / CSV export"]
     export --> opensim["OpenSim scale / IK / ID"]
 ```
@@ -29,10 +27,12 @@ flowchart LR
 
 | Stage | API | Notes |
 | --- | --- | --- |
-| Load video | `mm.load_video(path)` | Creates a `VideoTrial`. |
-| Estimate 2D pose | `trial.estimate_pose2d()` | Requires `monomech[pose]`. |
-| Estimate world pose | `trial.estimate_pose3d_world()` | Uses pose results from the video stage. |
-| Estimate global pose | `trial.estimate_pose3d_global()` | Produces global coordinates suitable for export. |
+| Estimate global pose | `mm.estimate_pose(path)` | Requires `monomech[pose]`. |
+| Smooth data | `mm.smooth(result_or_trc)` | Works with pose, marker results, and TRC files. |
+| Fill gaps | `mm.gap_fill(result_or_trc)` | Interpolates short gaps. |
+| Preview pose | `pose.vis_2d()`, `pose.vis_3d()` | Notebook-friendly frame checks. |
 | Load markers | `mm.load_trc(path)` | Creates a `MarkerTrial`. |
-| Clean markers | `trial.clean_markers()` | Gap fill and smooth marker trajectories. |
-| OpenSim | `trial.run_opensim_*()` | Requires OpenSim-compatible bindings. |
+| Scale model | `mm.run_scaling(...)` | Requires OpenSim-compatible bindings. |
+| Inverse kinematics | `mm.run_ik(...)` | Returns an IK `StorageResult`. |
+| Inverse dynamics | `mm.run_id(...)` | Accepts measured or estimated external loads. |
+| Visualize | `mm.animate(...)` | Creates a notebook-ready HTML viewer. |

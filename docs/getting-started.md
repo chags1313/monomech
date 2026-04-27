@@ -75,30 +75,26 @@ video_path = Path("data/subject01.mp4")
 output_dir = Path("outputs/subject01")
 output_dir.mkdir(parents=True, exist_ok=True)
 
-trial = mm.load_video(video_path)
-```
+pose = mm.estimate_pose(video_path, root_centered=False, floored=True)
+pose = mm.smooth(pose, cutoff_hz=6.0)
+pose = mm.gap_fill(pose, max_gap_frames=12)
 
-Run stages separately while learning:
-
-```python
-pose2d = trial.estimate_pose2d()
-pose3d_world = trial.estimate_pose3d_world()
-pose3d_global = trial.estimate_pose3d_global()
-
-print(pose2d.summary().head())
-print(pose3d_global.to_wide_df().head())
+display(pose.summary().head())
+pose.vis_2d(frame=50)
+pose.vis_3d(frame=50)
 ```
 
 Export the global pose:
 
 ```python
-pose3d_global.to_csv(output_dir / "subject01_global.csv")
-trc_path = pose3d_global.to_trc(output_dir / "subject01_global.trc")
+pose.to_csv(output_dir / "subject01_global.csv")
+trc_path = pose.to_trc(output_dir / "subject01_global.trc")
 ```
 
-Once the staged run makes sense, use the wrapper:
+The lower-level trial object is still available when you want each pose stage separately:
 
 ```python
+trial = mm.load_video(video_path)
 run = trial.run_pipeline(
     export_csv=True,
     export_trc=True,
@@ -136,13 +132,10 @@ display(trial.summary().head())
 Clean and export:
 
 ```python
-trial.clean_markers(
-    gap_fill_method="rigid_cluster",
-    gap_fill_max_frames=20,
-    cutoff_hz=6.0,
-)
+markers = mm.gap_fill(trc_path, max_gap_frames=20)
+markers = mm.smooth(markers, cutoff_hz=6.0)
 
-clean_trc = trial.to_trc(output_dir / "walk_clean.trc")
+clean_trc = markers.to_trc(output_dir / "walk_clean.trc")
 print(clean_trc)
 ```
 
@@ -153,18 +146,14 @@ OpenSim steps work after you have a TRC file and a compatible model.
 ```python
 import monomech as mm
 
-model_path = mm.get_builtin_osim_model("pose")
-trc_path = "outputs/subject01/subject01_global.trc"
-
-scale = trial.run_opensim_scale(
-    model_path=model_path,
-    trc_path=trc_path,
+scale = mm.run_scaling(
+    pose,
+    model="pose",
     output_dir="outputs/subject01/scale",
 )
 
-ik = trial.run_opensim_ik(
-    model_path=scale.scaled_model_path,
-    trc_path=trc_path,
+ik = mm.run_ik(
+    scale,
     output_dir="outputs/subject01/ik",
 )
 ```
@@ -180,14 +169,10 @@ print(ik.metadata["preflight"])
 Add external loads for inverse dynamics:
 
 ```python
-estimated_loads = mm.external.estimate_grf(
-    pose3d=run.pose3d_global,
-    body_mass_kg=75.0,
-)
+estimated_loads = mm.estimate_grf(pose, body_mass_kg=75.0)
 
-id_result = trial.run_opensim_id(
-    model_path=scale.scaled_model_path,
-    ik_path=ik.path,
+id_result = mm.run_id(
+    ik=ik,
     external_forces=estimated_loads,
     output_dir="outputs/subject01/id",
 )
@@ -250,6 +235,7 @@ Use stable time windows for scaling and make sure force data covers the IK inter
 ## Continue Learning
 
 - [Example notebooks](examples.md)
+- [API reference](api.md)
 - [External loads and forces](stages/forces.md)
 - [OpenSim scale, IK, and ID](stages/opensim.md)
 - [Full video-to-ID pipeline](stages/full-pipeline.md)

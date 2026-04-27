@@ -113,52 +113,43 @@ video_path = Path("data/subject01.mp4")
 output_dir = Path("outputs/subject01")
 output_dir.mkdir(parents=True, exist_ok=True)
 
-trial = mm.load_video(video_path)
-run = trial.run_pipeline(
-    export_csv=True,
-    export_trc=True,
-    output_dir=output_dir,
-)
+pose = mm.estimate_pose(video_path, root_centered=False, floored=True)
+pose = mm.gap_fill(mm.smooth(pose))
 
-print(run.csv_paths)
-print(run.trc_path)
+pose.vis_2d(frame=50)
+pose.vis_3d(frame=50)
+
+pose.to_csv(output_dir / "subject01_pose.csv")
+trc_path = pose.to_trc(output_dir / "subject01.trc")
+print(trc_path)
 ```
 
 ## First OpenSim Run
 
 ```python
-model_path = mm.get_builtin_osim_model("pose")
-
-scale = trial.run_opensim_scale(
-    model_path=model_path,
-    trc_path=run.trc_path,
+scale = mm.run_scaling(
+    pose,
+    model="pose",
     output_dir=output_dir / "scale",
 )
 
-ik = trial.run_opensim_ik(
-    model_path=scale.scaled_model_path,
-    trc_path=run.trc_path,
-    output_dir=output_dir / "ik",
-)
+ik = mm.run_ik(scale, output_dir=output_dir / "ik")
 
-estimated_loads = mm.external.estimate_grf(
-    pose3d=run.pose3d_global,
-    body_mass_kg=75.0,
-)
+estimated_loads = mm.estimate_grf(pose, body_mass_kg=75.0)
 
-id_result = trial.run_opensim_id(
-    model_path=scale.scaled_model_path,
-    ik_path=ik.path,
+id_result = mm.run_id(
+    ik=ik,
     external_forces=estimated_loads,
     output_dir=output_dir / "id",
 )
 
-animation = mm.save_opensim_animation(
-    osim_path=scale.scaled_model_path,
-    mot_path=ik.path,
-    id_path=id_result.path,
-    out_glb_path=output_dir / "animation" / "subject01_ik_id.glb",
+viewer = mm.animate(
+    ik=ik,
+    id=id_result,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    output_dir=output_dir / "visualizer",
 )
+viewer.show()
 ```
 
 ## Built-In Preflight Checks
@@ -183,6 +174,10 @@ OpenSim tools can fail on NaNs, infinite values, mismatched timing, or missing f
 -   **Examples**
 
     Open [Example notebooks](examples.md) for video, marker cleanup, OpenSim setup, and video-to-ID.
+
+-   **API reference**
+
+    Use [API reference](api.md) for function signatures, result methods, and config objects.
 
 -   **External loads**
 

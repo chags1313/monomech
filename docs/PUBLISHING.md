@@ -33,8 +33,8 @@ If PyPI reports `invalid-pending-publisher` for an existing project, configure t
 After `main` is ready:
 
 ```bash
-git tag v0.15.10
-git push origin v0.15.10
+git tag v0.15.11
+git push origin v0.15.11
 ```
 
 GitHub Actions will build distributions from that tag and upload them to PyPI.

@@ -214,8 +214,8 @@ class BaseResult:
         frame: int = 0,
         ax=None,
         show: bool = True,
-        color: str = "white",
-        background: str = "#101418",
+        color: str = "black",
+        background: str = "white",
         line_width: float = 2.0,
         marker_size: float = 28.0,
     ):
@@ -252,7 +252,6 @@ class BaseResult:
             pts[valid, 0], pts[valid, 1], s=marker_size, c=color, edgecolors="none", zorder=3
         )
         ax.set_aspect("equal", adjustable="box")
-        ax.invert_yaxis()
         ax.set_xticks([])
         ax.set_yticks([])
         ax.set_title(f"{self.name} frame {frame}", color=color)
@@ -268,8 +267,8 @@ class BaseResult:
         frame: int = 0,
         ax=None,
         show: bool = True,
-        color: str = "white",
-        background: str = "#101418",
+        color: str = "black",
+        background: str = "white",
         line_width: float = 2.0,
         marker_size: float = 28.0,
     ):
@@ -302,8 +301,8 @@ class BaseResult:
             if np.isfinite(a).all() and np.isfinite(b).all():
                 ax.plot(
                     [a[0], b[0]],
-                    [a[1], b[1]],
                     [a[2], b[2]],
+                    [a[1], b[1]],
                     color=color,
                     linewidth=line_width,
                     alpha=0.9,
@@ -311,21 +310,27 @@ class BaseResult:
 
         valid = np.isfinite(pts[:, :3]).all(axis=1)
         ax.scatter(
-            pts[valid, 0], pts[valid, 1], pts[valid, 2], s=marker_size, c=color, depthshade=False
+            pts[valid, 0],
+            pts[valid, 2],
+            pts[valid, 1],
+            s=marker_size,
+            c=color,
+            depthshade=False,
         )
         finite = pts[valid, :3]
         if finite.size:
-            center = np.nanmean(finite, axis=0)
-            span = float(np.nanmax(np.ptp(finite, axis=0)))
+            display_finite = finite[:, [0, 2, 1]]
+            center = np.nanmean(display_finite, axis=0)
+            span = float(np.nanmax(np.ptp(display_finite, axis=0)))
             span = span if span > 0 else 1.0
             half = span * 0.6
             ax.set_xlim(center[0] - half, center[0] + half)
             ax.set_ylim(center[1] - half, center[1] + half)
             ax.set_zlim(center[2] - half, center[2] + half)
-        ax.view_init(elev=16, azim=-70)
+        ax.view_init(elev=12, azim=-70)
         ax.set_xlabel("X", color=color)
-        ax.set_ylabel("Y", color=color)
-        ax.set_zlabel("Z", color=color)
+        ax.set_ylabel("Z", color=color)
+        ax.set_zlabel("Y", color=color)
         ax.set_title(f"{self.name} frame {frame}", color=color)
         ax.tick_params(colors=color)
         if show:

@@ -33,6 +33,25 @@ def test_smooth_and_gap_fill_top_level_work_on_pose_results():
     assert smoothed is not filled
 
 
+def test_pose_preview_defaults_are_light_and_y_up():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    pose = _pose_with_gap().gap_fill(max_gap_frames=3)
+
+    ax2 = pose.vis_2d(show=False)
+    assert ax2.get_facecolor() == (1.0, 1.0, 1.0, 1.0)
+    assert not ax2.yaxis_inverted()
+
+    ax3 = pose.vis_3d(show=False)
+    assert ax3.get_facecolor() == (1.0, 1.0, 1.0, 1.0)
+    assert ax3.get_zlabel() == "Y"
+    assert ax3.get_ylabel() == "Z"
+    plt.close("all")
+
+
 def test_load_and_external_forces_helpers_are_concise():
     dumbbell = mm.load(type="carried", body="hand_r", mass_kg=10.0)
     forces = mm.external_forces(loads=[dumbbell], include_estimated_grf=True)

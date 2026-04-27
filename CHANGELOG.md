@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.15.11
+
+### Fixed
+- made `vis_2d()` and `vis_3d()` use white backgrounds with black skeleton lines and markers by default
+- corrected `vis_2d()` orientation and made `vis_3d()` display with model Y as the vertical axis
+
 ## 0.15.10
 
 ### Added

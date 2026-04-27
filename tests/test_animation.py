@@ -114,6 +114,30 @@ def test_opensim_visualizer_references_glb_by_default(tmp_path):
     assert result.metadata["embedded_glb"] is False
 
 
+def test_visualizer_repr_inlines_glb_for_notebooks(tmp_path):
+    markers = pd.DataFrame(
+        {
+            "hip_r_x": [0.0],
+            "hip_r_y": [0.0],
+            "hip_r_z": [0.0],
+        },
+        index=pd.Index([0.0], name="time"),
+    )
+    glb_path = tmp_path / "motion.glb"
+    glb_path.write_bytes(b"glb")
+    result = mm.save_opensim_visualizer(
+        tmp_path / "viewer.html",
+        marker_dataframe=markers,
+        glb_path=glb_path,
+    )
+
+    html = result._repr_html_()
+
+    assert "window.MONOMECH_GLB_BASE64" in html
+    assert "loadGlb(url)" in html
+    assert "Z2xi" in html
+
+
 def test_animate_exposes_speed_and_reference_options(monkeypatch, tmp_path):
     ik_path = tmp_path / "trial_ik.mot"
     ik_path.write_text("endheader\ntime pelvis_tx\n0.0 0.0\n", encoding="utf-8")

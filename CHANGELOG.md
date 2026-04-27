@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.15.14
+
+### Fixed
+- made notebook visualizer display inject the GLB as an in-memory browser blob instead of relying on notebook local-file fetches
+
 ## 0.15.13
 
 ### Changed

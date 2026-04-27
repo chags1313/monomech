@@ -39,42 +39,127 @@ class OpenSimVisualizerResult:
     metadata: dict[str, Any]
 
     def _repr_html_(self) -> str:
+        try:
+            return _inline_notebook_visualizer_html(self.html_path, self.metadata)
+        except Exception:
+            pass
         uri = self.html_path.resolve().as_uri()
         return (
             f'<iframe src="{uri}" width="100%" height="860" '
             'style="border:0;border-radius:8px;overflow:hidden;"></iframe>'
         )
 
-    def display(self, *, width: str = "100%", height: int = 860):
+    def display(self, *, width: str = "100%", height: int = 860, inline_glb: bool = True):
         """Display this visualizer in a Jupyter notebook."""
 
-        return display_visualizer(self, width=width, height=height)
+        return display_visualizer(self, width=width, height=height, inline_glb=inline_glb)
 
-    def show(self, *, width: str = "100%", height: int = 860):
+    def show(self, *, width: str = "100%", height: int = 860, inline_glb: bool = True):
         """Alias for `display()` in notebooks."""
 
-        return self.display(width=width, height=height)
+        return self.display(width=width, height=height, inline_glb=inline_glb)
 
 
-def display_visualizer(target: Any, *, width: str = "100%", height: int = 860):
+def display_visualizer(
+    target: Any,
+    *,
+    width: str = "100%",
+    height: int = 860,
+    inline_glb: bool = True,
+):
     """Display a monomech visualizer from a path or pipeline result in Jupyter."""
 
     html_path = None
+    metadata = {}
     if isinstance(target, OpenSimVisualizerResult):
         html_path = target.html_path
+        metadata = target.metadata
     elif hasattr(target, "visualizer") and target.visualizer is not None:
         html_path = target.visualizer.html_path
+        metadata = getattr(target.visualizer, "metadata", {}) or {}
     else:
         html_path = Path(target)
 
     try:
-        from IPython.display import IFrame, display
+        from IPython.display import HTML, IFrame, display
     except Exception as exc:
         raise ImportError("Install `monomech[notebook]` to display visualizers in Jupyter.") from exc
+
+    if inline_glb:
+        html = _inline_notebook_visualizer_html(html_path, metadata, width=width, height=height)
+        frame = HTML(html)
+        display(frame)
+        return frame
 
     frame = IFrame(Path(html_path).expanduser().resolve().as_uri(), width=width, height=height)
     display(frame)
     return frame
+
+
+def _inline_notebook_visualizer_html(
+    html_path: str | Path,
+    metadata: dict[str, Any] | None = None,
+    *,
+    width: str = "100%",
+    height: int = 860,
+) -> str:
+    html_path = Path(html_path).expanduser().resolve()
+    html = html_path.read_text(encoding="utf-8")
+    glb_path = None
+    if metadata:
+        glb_path = metadata.get("glb_path")
+    if glb_path:
+        glb = Path(glb_path).expanduser().resolve()
+        if glb.is_file():
+            b64 = base64.b64encode(glb.read_bytes()).decode("ascii")
+            html = _inject_glb_base64_autoload(html, b64)
+    sizing = (
+        f"<style>html,body{{width:{escape(str(width))};"
+        f"height:{int(height)}px;min-height:{int(height)}px;}}</style>"
+    )
+    return html.replace("</head>", sizing + "</head>", 1)
+
+
+def _inject_glb_base64_autoload(html: str, b64: str) -> str:
+    match = re.search(
+        r'(<script[^>]*type=["\']module["\'][^>]*>)(.*?)(</script>)',
+        html,
+        flags=re.I | re.S,
+    )
+    if not match:
+        return html
+    start_tag, module_code, end_tag = match.groups()
+    inject_global = '<script>window.MONOMECH_GLB_BASE64="__GLB_B64__";</script>'
+    autoload_js = r"""
+
+// ---- Auto-load GLB injected by monomech notebook display ----
+try {
+  if (window.MONOMECH_GLB_BASE64) {
+    const binary = atob(window.MONOMECH_GLB_BASE64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: "model/gltf-binary" });
+    const url = URL.createObjectURL(blob);
+    if (typeof loadGlb === "function") {
+      loadGlb(url);
+    } else {
+      console.error("monomech notebook display could not find loadGlb().");
+    }
+  }
+} catch (error) {
+  console.error("monomech notebook GLB autoload error:", error);
+}
+"""
+    patched = (
+        html[: match.start()]
+        + inject_global
+        + start_tag
+        + module_code
+        + autoload_js
+        + end_tag
+        + html[match.end() :]
+    )
+    return patched.replace("__GLB_B64__", b64)
 
 
 def _require_animation_dependencies():

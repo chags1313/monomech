@@ -254,6 +254,8 @@ viewer.show()
 
 The visualizer can show the animated GLB mesh, marker fallback, force arrows, IK traces, and ID traces. By default, the HTML references a sibling GLB file instead of embedding it, which keeps notebooks and docs responsive. Use `embed_glb=True` only when you need a single self-contained HTML file.
 
+In Jupyter, `viewer.show()` injects the GLB into the displayed copy of the viewer as a browser blob, so the notebook does not have to fetch a local sibling file.
+
 | Mode | Behavior |
 | --- | --- |
 | `preview` | Faster export for quick notebook checks. |

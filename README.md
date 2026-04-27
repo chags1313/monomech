@@ -67,6 +67,62 @@ print(run.csv_paths)
 print(run.trc_path)
 ```
 
+## Notebook-First Workflow
+
+The high-level API is designed to read like the analysis steps in a notebook:
+
+```python
+import monomech as mm
+
+pose = mm.estimate_pose(
+    "data/curl.mp4",
+    root_centered=False,
+    floored=True,
+)
+
+pose = mm.smooth(pose, cutoff_hz=6.0)
+pose = mm.gap_fill(pose, max_gap_frames=12)
+
+pose.vis_2d(frame=100)
+pose.vis_3d(frame=100)
+
+scaled_model = mm.run_scaling(pose, model="pose", output_dir="outputs/curl/scale")
+ik = mm.run_ik(scaled_model, output_dir="outputs/curl/ik")
+
+dumbbell = mm.load(type="carried", body="hand_r", mass_kg=10.0)
+grf = mm.estimate_grf(pose, body_mass_kg=82.0)
+forces = mm.external_forces(loads=[dumbbell, *grf])
+
+id_result = mm.run_id(
+    ik=ik,
+    external_forces=forces,
+    output_dir="outputs/curl/id",
+)
+
+ik.plot()
+id_result.plot()
+
+animation = mm.animate(
+    ik=ik,
+    id=id_result,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    output_dir="outputs/curl/visualizer",
+)
+animation.show()
+```
+
+For batch scripts, use the one-call aliases:
+
+```python
+result = mm.video_pipeline(
+    "data/curl.mp4",
+    model_path=mm.get_builtin_osim_model("pose"),
+    output_dir="outputs/curl",
+)
+
+result.display()
+```
+
 ## Full Pipeline: Video To Inverse Dynamics
 
 ```python
@@ -226,8 +282,8 @@ Add `--opensim` when OpenSim-compatible bindings are installed.
 GitHub Actions builds distributions on every push to `main`. PyPI publishing goes directly to PyPI through trusted publishing and is triggered by version tags such as:
 
 ```bash
-git tag v0.15.9
-git push origin v0.15.9
+git tag v0.15.10
+git push origin v0.15.10
 ```
 
 The publish workflow can also be run manually from GitHub Actions with the `publish` input set to `true`.

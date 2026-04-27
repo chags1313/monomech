@@ -121,25 +121,15 @@ manual_load = mm.external.constant_force(
 For the common carried-load case:
 
 ```python
-bag_load = mm.external.carried_load(
-    mass_kg=5.0,
-    applied_to_body="radius_r",
-    point=(0.0, -0.2, 0.0),
-    start_time=0.0,
-    end_time=2.0,
-    name="right_hand_bag",
-)
+bag_load = mm.load(type="carried", body="hand_r", mass_kg=5.0)
 ```
+
+`mm.load(type="carried", ...)` creates the same OpenSim external load as `mm.external.carried_load(...)`, but keeps the common notebook workflow concise.
 
 For a full video-to-ID run, combine estimated ground-reaction forces with the carried load in one argument:
 
 ```python
-dumbbell = mm.external.carried_load(
-    mass_kg=12.5,
-    applied_to_body="radius_r",
-    point=(0.0, -0.2, 0.0),
-    name="right_dumbbell",
-)
+dumbbell = mm.load(type="carried", body="hand_r", mass_kg=12.5)
 
 result = mm.video_to_inverse_dynamics(
     "data/right_curl.mp4",
@@ -147,6 +137,26 @@ result = mm.video_to_inverse_dynamics(
     output_dir="outputs/right_curl",
     body_mass_kg=82.0,
     external_forces=mm.external.with_estimated_grf(dumbbell),
+)
+```
+
+For the staged API:
+
+```python
+pose = mm.estimate_pose("data/right_curl.mp4")
+pose = mm.gap_fill(mm.smooth(pose))
+
+scaled_model = mm.run_scaling(pose, model="pose", output_dir="outputs/right_curl/scale")
+ik = mm.run_ik(scaled_model, output_dir="outputs/right_curl/ik")
+
+dumbbell = mm.load(type="carried", body="hand_r", mass_kg=12.5)
+grf = mm.estimate_grf(pose, body_mass_kg=82.0)
+forces = mm.external_forces(loads=[dumbbell, *grf])
+
+id_result = mm.run_id(
+    ik=ik,
+    external_forces=forces,
+    output_dir="outputs/right_curl/id",
 )
 ```
 

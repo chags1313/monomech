@@ -179,6 +179,19 @@ Pipeline results expose the same shortcut:
 result.display()
 ```
 
+When you already have IK and ID result objects from the staged API, `animate()` is the shortest path:
+
+```python
+animation = mm.animate(
+    ik=ik,
+    id=id_result,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    output_dir="outputs/subject01/visualizer",
+)
+
+animation.show()
+```
+
 In a script, open `viewer.html` in a browser.
 
 The same visualizer works well on GitHub Pages because it does not need a Python server. The online page lets readers upload their own `.glb` export directly in the browser:

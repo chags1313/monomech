@@ -19,6 +19,18 @@ def test_public_api():
     assert hasattr(mm, "trc_to_inverse_dynamics")
     assert hasattr(mm, "video_to_inverse_dynamics")
     assert hasattr(mm, "get_builtin_geometry_dir")
+    assert hasattr(mm, "estimate_pose")
+    assert hasattr(mm, "smooth")
+    assert hasattr(mm, "gap_fill")
+    assert hasattr(mm, "run_scaling")
+    assert hasattr(mm, "run_ik")
+    assert hasattr(mm, "load")
+    assert hasattr(mm, "estimate_grf")
+    assert hasattr(mm, "external_forces")
+    assert hasattr(mm, "run_id")
+    assert hasattr(mm, "animate")
+    assert hasattr(mm, "video_pipeline")
+    assert hasattr(mm, "marker_pipeline")
 
 
 def test_native_dependencies_are_optional():

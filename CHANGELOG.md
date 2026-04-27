@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.15.10
+
+### Added
+- added notebook-first workflow helpers: `estimate_pose()`, `smooth()`, `gap_fill()`, `run_scaling()`, `run_ik()`, `run_id()`, `animate()`, `video_pipeline()`, and `marker_pipeline()`
+- added `mm.load(...)`, `mm.estimate_grf(...)`, and `mm.external_forces(...)` convenience helpers for external loads
+- added `vis_2d()` and `vis_3d()` pose/marker previews plus `StorageResult.plot()` and `StorageResult.to_csv()`
+
 ## 0.15.9
 
 ### Added

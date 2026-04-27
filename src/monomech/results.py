@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import io
-import json
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -9,9 +7,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .config import GapFillConfig
 from .filters import apply_smoothing, gap_fill_array
-from .landmarks import FOOT_MARKERS, NAME_TO_INDEX
+from .landmarks import SEGMENTS
 from .qc import QCReport
 
 
@@ -49,7 +46,10 @@ class BaseResult:
         )
 
     def to_wide_df(self) -> pd.DataFrame:
-        rows: dict[str, np.ndarray] = {"frame": np.arange(self.frames, dtype=int), "time_s": self.time}
+        rows: dict[str, np.ndarray] = {
+            "frame": np.arange(self.frames, dtype=int),
+            "time_s": self.time,
+        }
         for m, landmark in enumerate(self.landmark_names):
             for d, dim in enumerate(self.dims):
                 rows[f"{landmark}_{dim}"] = self.data[:, m, d]
@@ -60,7 +60,12 @@ class BaseResult:
     def to_long_df(self) -> pd.DataFrame:
         frames = self.to_wide_df()
         value_cols = [c for c in frames.columns if c not in {"frame", "time_s"}]
-        return frames.melt(id_vars=["frame", "time_s"], value_vars=value_cols, var_name="channel", value_name="value")
+        return frames.melt(
+            id_vars=["frame", "time_s"],
+            value_vars=value_cols,
+            var_name="channel",
+            value_name="value",
+        )
 
     def to_csv(self, path: str | Path, *, format: str = "wide") -> Path:
         path = Path(path)
@@ -184,7 +189,9 @@ class BaseResult:
         try:
             import matplotlib.pyplot as plt
         except Exception as exc:
-            raise ImportError("matplotlib is required for plotting. Install monomech[notebook].") from exc
+            raise ImportError(
+                "matplotlib is required for plotting. Install monomech[notebook]."
+            ) from exc
         fig, ax = plt.subplots(figsize=(10, 4))
         for label, values in series.items():
             ax.plot(self.time, values, label=label)
@@ -201,6 +208,130 @@ class BaseResult:
             title=f"{self.name}: {landmark}",
         )
 
+    def vis_2d(
+        self,
+        *,
+        frame: int = 0,
+        ax=None,
+        show: bool = True,
+        color: str = "white",
+        background: str = "#101418",
+        line_width: float = 2.0,
+        marker_size: float = 28.0,
+    ):
+        """Draw one pose frame as a clean 2D skeleton."""
+
+        try:
+            import matplotlib.pyplot as plt
+        except Exception as exc:
+            raise ImportError(
+                "matplotlib is required for plotting. Install monomech[notebook]."
+            ) from exc
+
+        frame = int(np.clip(frame, 0, self.frames - 1))
+        pts = np.asarray(self.data[frame], dtype=float)
+        if pts.shape[1] < 2:
+            raise ValueError("2D visualization requires at least two coordinate dimensions.")
+
+        if ax is None:
+            _, ax = plt.subplots(figsize=(7, 7))
+        ax.set_facecolor(background)
+        ax.figure.set_facecolor(background)
+
+        index = {name: i for i, name in enumerate(self.landmark_names)}
+        for a_name, b_name in SEGMENTS.values():
+            if a_name not in index or b_name not in index:
+                continue
+            a = pts[index[a_name], :2]
+            b = pts[index[b_name], :2]
+            if np.isfinite(a).all() and np.isfinite(b).all():
+                ax.plot([a[0], b[0]], [a[1], b[1]], color=color, linewidth=line_width, alpha=0.9)
+
+        valid = np.isfinite(pts[:, :2]).all(axis=1)
+        ax.scatter(
+            pts[valid, 0], pts[valid, 1], s=marker_size, c=color, edgecolors="none", zorder=3
+        )
+        ax.set_aspect("equal", adjustable="box")
+        ax.invert_yaxis()
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_title(f"{self.name} frame {frame}", color=color)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        if show:
+            plt.show()
+        return ax
+
+    def vis_3d(
+        self,
+        *,
+        frame: int = 0,
+        ax=None,
+        show: bool = True,
+        color: str = "white",
+        background: str = "#101418",
+        line_width: float = 2.0,
+        marker_size: float = 28.0,
+    ):
+        """Draw one pose or marker frame as a clean 3D skeleton."""
+
+        try:
+            import matplotlib.pyplot as plt
+        except Exception as exc:
+            raise ImportError(
+                "matplotlib is required for plotting. Install monomech[notebook]."
+            ) from exc
+
+        frame = int(np.clip(frame, 0, self.frames - 1))
+        pts = np.asarray(self.data[frame], dtype=float)
+        if pts.shape[1] < 3:
+            raise ValueError("3D visualization requires three coordinate dimensions.")
+
+        if ax is None:
+            fig = plt.figure(figsize=(8, 7))
+            ax = fig.add_subplot(111, projection="3d")
+        ax.set_facecolor(background)
+        ax.figure.set_facecolor(background)
+
+        index = {name: i for i, name in enumerate(self.landmark_names)}
+        for a_name, b_name in SEGMENTS.values():
+            if a_name not in index or b_name not in index:
+                continue
+            a = pts[index[a_name], :3]
+            b = pts[index[b_name], :3]
+            if np.isfinite(a).all() and np.isfinite(b).all():
+                ax.plot(
+                    [a[0], b[0]],
+                    [a[1], b[1]],
+                    [a[2], b[2]],
+                    color=color,
+                    linewidth=line_width,
+                    alpha=0.9,
+                )
+
+        valid = np.isfinite(pts[:, :3]).all(axis=1)
+        ax.scatter(
+            pts[valid, 0], pts[valid, 1], pts[valid, 2], s=marker_size, c=color, depthshade=False
+        )
+        finite = pts[valid, :3]
+        if finite.size:
+            center = np.nanmean(finite, axis=0)
+            span = float(np.nanmax(np.ptp(finite, axis=0)))
+            span = span if span > 0 else 1.0
+            half = span * 0.6
+            ax.set_xlim(center[0] - half, center[0] + half)
+            ax.set_ylim(center[1] - half, center[1] + half)
+            ax.set_zlim(center[2] - half, center[2] + half)
+        ax.view_init(elev=16, azim=-70)
+        ax.set_xlabel("X", color=color)
+        ax.set_ylabel("Y", color=color)
+        ax.set_zlabel("Z", color=color)
+        ax.set_title(f"{self.name} frame {frame}", color=color)
+        ax.tick_params(colors=color)
+        if show:
+            plt.show()
+        return ax
+
 
 @dataclass(slots=True)
 class Pose2DResult(BaseResult):
@@ -212,7 +343,9 @@ class Pose3DWorldResult(BaseResult):
     dims: tuple[str, ...] = ("x_m", "y_m", "z_m")
 
     def preview_3d(self):
-        return self.plot_landmark("right_ankle" if "right_ankle" in self.landmark_names else self.landmark_names[0])
+        return self.plot_landmark(
+            "right_ankle" if "right_ankle" in self.landmark_names else self.landmark_names[0]
+        )
 
 
 @dataclass(slots=True)
@@ -260,7 +393,10 @@ class Pose3DGlobalResult(Pose3DWorldResult):
             if np.isfinite(y_min):
                 data[:, :, 1] -= y_min
         from .io.trc import write_trc
-        return write_trc(path, time=self.time, data=data, marker_names=names, units=units, fps=self.fps)
+
+        return write_trc(
+            path, time=self.time, data=data, marker_names=names, units=units, fps=self.fps
+        )
 
 
 @dataclass(slots=True)
@@ -293,7 +429,10 @@ class MarkerResult(Pose3DGlobalResult):
                 remapped[:, :, out_idx] = data[:, :, src_idx] * sign
             data = remapped
         from .io.trc import write_trc
-        return write_trc(path, time=self.time, data=data, marker_names=names, units=units, fps=self.fps)
+
+        return write_trc(
+            path, time=self.time, data=data, marker_names=names, units=units, fps=self.fps
+        )
 
 
 @dataclass(slots=True)
@@ -305,12 +444,44 @@ class StorageResult:
     def to_dataframe(self) -> pd.DataFrame:
         return self.dataframe.copy()
 
+    def to_csv(self, path: str | Path, *, index: bool = False) -> Path:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.dataframe.to_csv(path, index=index)
+        return path
+
     @property
     def motion_path(self) -> Path:
         return self.path
 
     def summary(self) -> pd.DataFrame:
         return self.dataframe.describe().T
+
+    def plot(
+        self, *, columns: list[str] | tuple[str, ...] | None = None, max_columns: int = 12, ax=None
+    ):
+        try:
+            import matplotlib.pyplot as plt
+        except Exception as exc:
+            raise ImportError(
+                "matplotlib is required for plotting. Install monomech[notebook]."
+            ) from exc
+
+        df = self.dataframe
+        time_col = "time" if "time" in df.columns else df.columns[0]
+        if columns is None:
+            numeric = [c for c in df.select_dtypes(include=["number"]).columns if c != time_col]
+            columns = numeric[:max_columns]
+        if ax is None:
+            _, ax = plt.subplots(figsize=(11, 4.5))
+        for col in columns:
+            if col in df.columns:
+                ax.plot(df[time_col], df[col], label=col)
+        ax.set_xlabel("Time (s)")
+        ax.set_title(self.path.stem)
+        ax.legend(loc="best", fontsize=8)
+        plt.tight_layout()
+        return ax
 
 
 @dataclass(slots=True)
@@ -325,7 +496,9 @@ class OpenSimScaleResult:
             [
                 {
                     "scaled_model_path": str(self.scaled_model_path),
-                    "setup_xml_path": None if self.setup_xml_path is None else str(self.setup_xml_path),
+                    "setup_xml_path": None
+                    if self.setup_xml_path is None
+                    else str(self.setup_xml_path),
                     "log_path": None if self.log_path is None else str(self.log_path),
                 }
             ]

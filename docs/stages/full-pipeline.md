@@ -2,6 +2,63 @@
 
 The pipeline helpers run the common workflows in one call while still returning every stage output. Use the one-line functions for repeatable processing, and use the staged calls when you are tuning model fit, marker cleanup, external loads, or OpenSim settings.
 
+## Notebook Workflow
+
+Use the short names when you want each processing step to be visible and inspectable:
+
+```python
+import monomech as mm
+
+pose = mm.estimate_pose(
+    "data/subject01.mp4",
+    root_centered=False,
+    floored=True,
+)
+
+pose = mm.smooth(pose, cutoff_hz=6.0)
+pose = mm.gap_fill(pose, max_gap_frames=12)
+
+pose.vis_2d(frame=80)
+pose.vis_3d(frame=80)
+
+scaled_model = mm.run_scaling(
+    pose,
+    model="pose",
+    output_dir="outputs/subject01/scale",
+)
+
+ik = mm.run_ik(
+    scaled_model,
+    output_dir="outputs/subject01/ik",
+)
+
+ik.plot()
+ik.to_csv("outputs/subject01/ik.csv")
+```
+
+Add loads, run ID, and display the notebook visualizer:
+
+```python
+dumbbell = mm.load(type="carried", body="hand_r", mass_kg=10.0)
+grf = mm.estimate_grf(pose, body_mass_kg=82.0)
+forces = mm.external_forces(loads=[dumbbell, *grf])
+
+id_result = mm.run_id(
+    ik=ik,
+    external_forces=forces,
+    output_dir="outputs/subject01/id",
+)
+
+animation = mm.animate(
+    ik=ik,
+    id=id_result,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    output_dir="outputs/subject01/visualizer",
+)
+
+animation.show()
+```
+
 ## Video To TRC
 
 ```python

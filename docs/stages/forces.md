@@ -126,6 +126,19 @@ bag_load = mm.load(type="carried", body="hand_r", mass_kg=5.0)
 
 `mm.load(type="carried", ...)` creates the same OpenSim external load as `mm.external.carried_load(...)`, but keeps the common notebook workflow concise. By default, the load is active for the full IK trial. Pass both `start_time=` and `end_time=` only when the load should be time-limited.
 
+The force is expressed in ground coordinates and the application point is expressed in the body frame you pass with `body=`. For `body="hand_r"` and the default `point=(0, 0, 0)`, OpenSim applies the load at the right-hand body origin. The visualizer reads the generated `ExternalLoads.xml` and IK motion, converts that body-local point into ground coordinates for each frame, and draws the arrow on the moving hand instead of at the scene origin.
+
+Use `point=` to move the application point within the body frame:
+
+```python
+dumbbell = mm.load(
+    type="carried",
+    body="hand_r",
+    mass_kg=10.0,
+    point=(0.03, -0.02, 0.00),
+)
+```
+
 ```python
 brief_push = mm.load(
     type="constant",

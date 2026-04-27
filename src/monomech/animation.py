@@ -1309,6 +1309,8 @@ def save_opensim_animation(
             "forces": _external_load_payload(
                 external_loads_path,
                 target_time=marker_payload["time"],
+                osim_path=osim_path,
+                ik_path=mot_path,
             ),
             "ik": _storage_for_visualizer(mot_path),
             "id": _storage_for_visualizer(id_path),
@@ -1719,7 +1721,13 @@ def _infer_marker_segments(marker_names: list[str]) -> list[list[int]]:
     return out
 
 
-def _external_load_payload(path: str | Path | None, *, target_time: list[float]) -> dict[str, Any] | None:
+def _external_load_payload(
+    path: str | Path | None,
+    *,
+    target_time: list[float],
+    osim_path: str | Path | None = None,
+    ik_path: str | Path | None = None,
+) -> dict[str, Any] | None:
     if path is None:
         return None
     from .io.storage import read_storage
@@ -1742,6 +1750,13 @@ def _external_load_payload(path: str | Path | None, *, target_time: list[float])
             if col.endswith("_vx") and f"{col[:-3]}_px" in df.columns
         }
     )
+    load_metadata = _external_loads_xml_metadata(force_path)
+    transform_payload, transform_warning = _external_load_frame_transforms(
+        load_metadata,
+        target_time=target_time,
+        osim_path=osim_path,
+        ik_path=ik_path,
+    )
     if len(src_t) < 2 or not load_names:
         return {
             "path": str(force_path),
@@ -1749,6 +1764,7 @@ def _external_load_payload(path: str | Path | None, *, target_time: list[float])
             "frames": [],
             "diagnostics": {
                 "warning": "No usable external-force samples were found.",
+                "load_metadata": load_metadata,
             },
         }
     target = np.asarray(target_time, dtype=float)
@@ -1767,7 +1783,7 @@ def _external_load_payload(path: str | Path | None, *, target_time: list[float])
     active_counts = {name: 0 for name in load_names}
     max_magnitudes = {name: 0.0 for name in load_names}
 
-    for t in np.asarray(target_time, dtype=float):
+    for i, t in enumerate(np.asarray(target_time, dtype=float)):
         frame = []
         for name in load_names:
             values = {}
@@ -1776,16 +1792,32 @@ def _external_load_payload(path: str | Path | None, *, target_time: list[float])
                 y = pd.to_numeric(df[col], errors="coerce").replace([np.inf, -np.inf], np.nan)
                 arr = y.fillna(0.0).to_numpy(dtype=float)
                 values[suffix] = float(np.interp(t, src_t, arr, left=0.0, right=0.0))
-            magnitude = float(np.linalg.norm([values["vx"], values["vy"], values["vz"]]))
+            point = np.asarray([values["px"], values["py"], values["pz"]], dtype=float)
+            force = np.asarray([values["vx"], values["vy"], values["vz"]], dtype=float)
+            meta = load_metadata.get(name, {})
+            point_frame = str(meta.get("point_expressed_in") or "/ground")
+            force_frame = str(meta.get("force_expressed_in") or "/ground")
+            point_transform = transform_payload.get((i, _frame_key(point_frame)))
+            force_transform = transform_payload.get((i, _frame_key(force_frame)))
+            raw_point = point.copy()
+            if point_transform is not None:
+                point = point_transform["R"] @ point + point_transform["p"]
+            if force_transform is not None:
+                force = force_transform["R"] @ force
+            magnitude = float(np.linalg.norm(force))
             if magnitude > 1e-6:
                 active_counts[name] += 1
                 max_magnitudes[name] = max(max_magnitudes[name], magnitude)
             frame.append(
                 {
                     "name": name,
-                    "point": [values["px"], values["py"], values["pz"]],
-                    "force": [values["vx"], values["vy"], values["vz"]],
+                    "point": np.round(point, 6).astype(float).tolist(),
+                    "force": np.round(force, 6).astype(float).tolist(),
                     "magnitude": magnitude,
+                    "applied_to_body": meta.get("applied_to_body"),
+                    "point_expressed_in": point_frame,
+                    "force_expressed_in": force_frame,
+                    "raw_point": np.round(raw_point, 6).astype(float).tolist(),
                 }
             )
         frames.append(frame)
@@ -1799,6 +1831,8 @@ def _external_load_payload(path: str | Path | None, *, target_time: list[float])
         )
     elif total_active == 0:
         warning = "External-load file was read, but all displayed force vectors are zero."
+    elif transform_warning:
+        warning = transform_warning
 
     return {
         "path": str(force_path),
@@ -1810,9 +1844,129 @@ def _external_load_payload(path: str | Path | None, *, target_time: list[float])
             "overlap_fraction": float(overlap_fraction),
             "active_frame_counts": active_counts,
             "max_magnitudes": max_magnitudes,
+            "load_metadata": load_metadata,
+            "frame_transform_warning": transform_warning,
             "warning": warning,
         },
     }
+
+
+def _external_loads_xml_metadata(mot_path: Path) -> dict[str, dict[str, str]]:
+    xml_path = mot_path.with_name(mot_path.name.replace("_external_loads.mot", "_ExternalLoads.xml"))
+    if xml_path == mot_path or not xml_path.is_file():
+        candidates = sorted(mot_path.parent.glob("*ExternalLoads*.xml"))
+        xml_path = candidates[0] if candidates else xml_path
+    if not xml_path.is_file():
+        return {}
+    try:
+        root = ET.parse(xml_path).getroot()
+    except Exception:
+        return {}
+
+    out: dict[str, dict[str, str]] = {}
+    for elem in root.iter():
+        if _tag(elem) != "externalforce":
+            continue
+        name = elem.attrib.get("name")
+        if not name:
+            continue
+        meta = {}
+        for child in list(elem):
+            tag = _tag(child)
+            text = (child.text or "").strip()
+            if tag == "applied_to_body":
+                meta["applied_to_body"] = text
+            elif tag == "force_expressed_in_body":
+                meta["force_expressed_in"] = text
+            elif tag == "point_expressed_in_body":
+                meta["point_expressed_in"] = text
+        out[name] = meta
+    return out
+
+
+def _frame_key(frame: str | None) -> str:
+    if frame is None:
+        return "ground"
+    key = str(frame).strip().strip("/")
+    if not key or key.lower() == "ground":
+        return "ground"
+    return key.split("/")[-1]
+
+
+def _external_load_frame_transforms(
+    load_metadata: dict[str, dict[str, str]],
+    *,
+    target_time: list[float],
+    osim_path: str | Path | None,
+    ik_path: str | Path | None,
+) -> tuple[dict[tuple[int, str], dict[str, np.ndarray]], str | None]:
+    needed_frames = {
+        _frame_key(meta.get(field))
+        for meta in load_metadata.values()
+        for field in ("point_expressed_in", "force_expressed_in")
+        if _frame_key(meta.get(field)) != "ground"
+    }
+    if not needed_frames:
+        return {}, None
+    if osim_path is None or ik_path is None:
+        return {}, (
+            "External-load points are body-local, but the model and IK motion were not available "
+            "to convert them for display."
+        )
+    try:
+        osim = _require_opensim_dependency()
+        model = osim.Model(str(Path(osim_path).expanduser().resolve()))
+        state = model.initSystem()
+        in_degrees, ik_times, labels, ik_data = _read_mot_or_sto(Path(ik_path).expanduser().resolve(), osim)
+        mapping, _ = _coordinate_mapping(model, labels, in_degrees=in_degrees)
+        frames = _resolve_opensim_frames(model, needed_frames)
+    except Exception as exc:
+        return {}, f"External-load display could not resolve body-local force points: {exc}"
+
+    if not mapping or len(ik_times) < 2:
+        return {}, "External-load display could not map IK coordinates for body-local force points."
+
+    transforms: dict[tuple[int, str], dict[str, np.ndarray]] = {}
+    targets = np.asarray(target_time, dtype=float)
+    for idx, target in enumerate(targets):
+        if not np.isfinite(target):
+            continue
+        row = np.empty(ik_data.shape[1], dtype=float)
+        for col in range(ik_data.shape[1]):
+            series = ik_data[:, col]
+            row[col] = float(np.interp(target, ik_times, series))
+        for coord, col, convert_degrees in mapping:
+            value = float(row[col])
+            if convert_degrees:
+                value *= np.pi / 180.0
+            try:
+                coord.setValue(state, value, True)
+            except Exception:
+                coord.setValue(state, value)
+        model.realizePosition(state)
+        for key, frame in frames.items():
+            transform = frame.getTransformInGround(state)
+            transforms[(idx, key)] = {
+                "R": _simtk_rot_to_np(transform.R()),
+                "p": _simtk_vec3_to_np(transform.p()),
+            }
+    return transforms, None
+
+
+def _resolve_opensim_frames(model, frame_names: set[str]) -> dict[str, Any]:
+    body_set = model.getBodySet()
+    body_map = {body_set.get(i).getName(): body_set.get(i) for i in range(body_set.getSize())}
+    out = {}
+    missing = []
+    for name in frame_names:
+        if name in body_map:
+            out[name] = body_map[name]
+        else:
+            missing.append(name)
+    if missing:
+        sample = ", ".join(sorted(body_map)[:12])
+        raise ValueError(f"unknown OpenSim body/frame(s) {missing}; available examples: {sample}")
+    return out
 
 
 def _write_visualizer_html(
@@ -2334,7 +2488,12 @@ def save_opensim_visualizer(
             stride=marker_stride,
         )
     markers = _marker_payload(marker_dataframe, max_frames=max_frames)
-    forces = _external_load_payload(external_loads_path, target_time=markers["time"])
+    forces = _external_load_payload(
+        external_loads_path,
+        target_time=markers["time"],
+        osim_path=osim_path,
+        ik_path=ik_path,
+    )
 
     glb_ref = None
     glb_source = None

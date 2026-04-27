@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.15.16
+
+### Fixed
+- made carried-load and body-local external-force arrows display at the moving OpenSim body instead of the ground origin
+- embedded external-load frame metadata in the visualizer payload so displayed force arrows match the OpenSim `ExternalLoads.xml` body and frame definitions
+
 ## 0.15.15
 
 ### Changed

@@ -143,6 +143,8 @@ For notebooks and review sessions, use `save_opensim_visualizer()`. It creates a
 - inverse-dynamics trace plots
 - a browser-side **Upload GLB** control for GitHub Pages and notebook sharing
 
+For carried objects and other body-local loads, pass both `osim_path` and `ik_path` when creating the visualizer. `monomech` uses the generated `ExternalLoads.xml` plus the IK motion to convert body-frame application points, such as `hand_r`, into ground coordinates before drawing the force arrows.
+
 ```python
 viewer = mm.save_opensim_visualizer(
     "outputs/subject01/animation/ik_id_viewer.html",

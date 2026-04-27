@@ -6,6 +6,7 @@ import pandas as pd
 import monomech as mm
 from monomech.animation import (
     _dedupe_geometry_specs,
+    _external_load_payload,
     _geometry_file_aliases,
     _inline_notebook_visualizer_html,
     _notebook_file_url,
@@ -93,6 +94,47 @@ def test_opensim_visualizer_writes_dashboard_without_glb(tmp_path):
     assert "model bone overlay" not in text
     assert "modelSkeletonGroup" not in text
     assert result.metadata["force_count"] == 1
+
+
+def test_external_load_payload_preserves_body_local_load_metadata(tmp_path):
+    forces_path = tmp_path / "trial_external_loads.mot"
+    forces_path.write_text(
+        "endheader\n"
+        "time carried_load_vx carried_load_vy carried_load_vz "
+        "carried_load_px carried_load_py carried_load_pz\n"
+        "0.0 0.0 -98.1 0.0 0.0 0.0 0.0\n"
+        "1.0 0.0 -98.1 0.0 0.0 0.0 0.0\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "trial_ExternalLoads.xml").write_text(
+        """<?xml version='1.0' encoding='UTF-8'?>
+<OpenSimDocument Version="40000">
+  <ExternalLoads name="ExternalLoads">
+    <objects>
+      <ExternalForce name="carried_load">
+        <applied_to_body>hand_r</applied_to_body>
+        <force_expressed_in_body>/ground</force_expressed_in_body>
+        <point_expressed_in_body>hand_r</point_expressed_in_body>
+        <force_identifier>carried_load_v</force_identifier>
+        <point_identifier>carried_load_p</point_identifier>
+        <torque_identifier>carried_load_t</torque_identifier>
+      </ExternalForce>
+    </objects>
+  </ExternalLoads>
+</OpenSimDocument>
+""",
+        encoding="utf-8",
+    )
+
+    payload = _external_load_payload(forces_path, target_time=[0.0, 1.0])
+
+    assert payload is not None
+    frame_load = payload["frames"][0][0]
+    assert frame_load["applied_to_body"] == "hand_r"
+    assert frame_load["point_expressed_in"] == "hand_r"
+    assert frame_load["force_expressed_in"] == "/ground"
+    assert frame_load["raw_point"] == [0.0, 0.0, 0.0]
+    assert "body-local" in payload["diagnostics"]["warning"]
 
 
 def test_opensim_visualizer_references_glb_by_default(tmp_path):

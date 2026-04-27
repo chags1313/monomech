@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.15.8
+
+### Added
+- packaged individual lumbar, thoracic, and cervical spine mesh files for the built-in pose model
+- embedded complete IK, inverse-dynamics, marker, and external-force visualizer data in exported GLB files
+
+### Changed
+- `get_builtin_osim_model("pose")` now returns the original geometry-bearing OSIM by default
+
+### Fixed
+- avoided substituting the generic `hat_spine.vtp` mesh for individual vertebra display geometry when exact spine meshes are available
+
 ## 0.15.7
 
 ### Added

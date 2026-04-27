@@ -40,13 +40,15 @@ def get_builtin_osim_model(
     name: str = "pose",
     *,
     extract_dir: str | Path | None = None,
-    include_geometry: bool = False,
+    include_geometry: bool = True,
 ) -> Path:
     """
     Return a stable filesystem path to a packaged OpenSim model.
 
     This avoids requiring users to use a `with` statement by copying the
-    packaged model into a cache directory the first time it is requested.
+    packaged model into a cache directory the first time it is requested. By
+    default the original model display geometry references are preserved so
+    animation export can resolve every mesh from the packaged geometry folder.
     """
     filename = _resolve_builtin_osim_filename(name)
 

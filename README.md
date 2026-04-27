@@ -206,8 +206,8 @@ Add `--opensim` when OpenSim-compatible bindings are installed.
 GitHub Actions builds distributions on every push to `main`. PyPI publishing goes directly to PyPI through trusted publishing and is triggered by version tags such as:
 
 ```bash
-git tag v0.15.7
-git push origin v0.15.7
+git tag v0.15.8
+git push origin v0.15.8
 ```
 
 The publish workflow can also be run manually from GitHub Actions with the `publish` input set to `true`.

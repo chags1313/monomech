@@ -35,10 +35,10 @@ print(mm.list_builtin_osim_models())
 model_path = mm.get_builtin_osim_model("pose")
 ```
 
-By default, bundled models are copied without mesh display geometry. This avoids missing `.vtp` visualization warnings during command-line runs. For GUI workflows:
+By default, bundled models keep their original mesh display geometry so animation export can resolve the packaged full-body meshes. For headless OpenSim runs where you only want IK/ID and do not need visualization geometry:
 
 ```python
-model_path = mm.get_builtin_osim_model("pose", include_geometry=True)
+model_path = mm.get_builtin_osim_model("pose", include_geometry=False)
 ```
 
 ## 1. Scale

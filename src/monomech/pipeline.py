@@ -201,6 +201,8 @@ def video_to_inverse_dynamics(
             osim_path=model,
             geom_dir=geom_dir,
             mot_path=marker_id.ik.path,
+            id_path=marker_id.id.path,
+            external_loads_path=external_loads_path,
             out_glb_path=out / "visualizer" / f"{trial.name}_ik.glb",
         )
 

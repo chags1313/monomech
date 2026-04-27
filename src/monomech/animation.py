@@ -754,6 +754,7 @@ def save_opensim_animation(
     out_glb_path: str | Path,
     geom_dir: str | Path | None = None,
     id_path: str | Path | None = None,
+    external_loads_path: str | Path | None = None,
     bone_hex: str = "#2b2f36",
     opacity: float = 1.0,
     skip_ground_fallbacks: bool = True,
@@ -776,9 +777,9 @@ def save_opensim_animation(
 ) -> OpenSimAnimationResult:
     """Export an animated OpenSim model to a single binary glTF/GLB file.
 
-    The animation is driven by IK coordinates from `mot_path`. If `id_path` is
-    provided, inverse-dynamics metadata is embedded in the GLB extras so one
-    file carries the visual motion and the kinetics provenance.
+    The animation is driven by IK coordinates from `mot_path`. If `id_path` or
+    `external_loads_path` are provided, complete synchronized plotting and
+    force-arrow data are embedded in the GLB extras for the online visualizer.
     """
 
     osim, pv, pygltflib = _require_animation_dependencies()
@@ -1177,6 +1178,21 @@ def save_opensim_animation(
         gltf.scenes[0].nodes = [node_idx for node_idx in gltf.scenes[0].nodes if node_idx in keep]
 
     id_summary = _id_metadata(id_path, osim)
+    visualizer_payload = None
+    if marker_df is not None:
+        marker_payload = _marker_payload(marker_df, max_frames=len(marker_df))
+        visualizer_payload = {
+            "title": "monomech IK and ID visualizer",
+            "markers": marker_payload,
+            "forces": _external_load_payload(
+                external_loads_path,
+                target_time=marker_payload["time"],
+            ),
+            "ik": _storage_for_visualizer(mot_path),
+            "id": _storage_for_visualizer(id_path),
+            "glb_path": None,
+            "force_scale": 0.35,
+        }
     metadata = {
         "osim_path": str(osim_path),
         "mot_path": str(mot_path),
@@ -1194,6 +1210,7 @@ def save_opensim_animation(
         "dropped_static_nodes": dropped_static_nodes,
         "dropped_origin_nodes": dropped_origin_nodes,
         "id_summary": id_summary,
+        "visualizer": visualizer_payload,
     }
     gltf.extras = {"monomech": metadata}
     gltf.animations = [animation]
@@ -1784,9 +1801,11 @@ def _write_visualizer_html(
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-    const data = JSON.parse(document.getElementById('payload').textContent);
-    const marker = data.markers || {names:[], time:[], frames:[], segments:[]};
-    const force = data.forces || {names:[], frames:[]};
+    const emptyMarkers = () => ({names:[], time:[], frames:[], segments:[]});
+    const emptyStore = () => ({path:null, columns:[], time:[], series:{}});
+    let data = JSON.parse(document.getElementById('payload').textContent);
+    let marker = data.markers || emptyMarkers();
+    let force = data.forces || {names:[], frames:[]};
     const scrub = document.getElementById('scrub');
     const timeLabel = document.getElementById('time');
     const playBtn = document.getElementById('play');
@@ -1800,14 +1819,17 @@ def _write_visualizer_html(
       notice.textContent = force.diagnostics.warning;
     }
 
-    document.getElementById('stats').innerHTML = [
-      ['Frames', marker.frames.length],
-      ['Markers', marker.names.length],
-      ['Forces', (force.names || []).length],
-      ['IK traces', data.ik?.columns?.length || 0],
-      ['ID traces', data.id?.columns?.length || 0],
-      ['Duration', marker.time.length ? (marker.time[marker.time.length-1]-marker.time[0]).toFixed(3)+' s' : '0 s']
-    ].map(([k,v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+    function refreshStats() {
+      document.getElementById('stats').innerHTML = [
+        ['Frames', marker.frames.length],
+        ['Markers', marker.names.length],
+        ['Forces', (force.names || []).length],
+        ['IK traces', data.ik?.columns?.length || 0],
+        ['ID traces', data.id?.columns?.length || 0],
+        ['Duration', marker.time.length ? (marker.time[marker.time.length-1]-marker.time[0]).toFixed(3)+' s' : '0 s']
+      ].map(([k,v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+    }
+    refreshStats();
 
     const canvas = document.getElementById('threeScene');
     const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
@@ -1835,20 +1857,27 @@ def _write_visualizer_html(
 
     const markerMaterial = new THREE.MeshStandardMaterial({ color:0x0f766e, roughness:.55, metalness:0.0 });
     const markerGeom = new THREE.SphereGeometry(0.018, 16, 12);
-    const markerMeshes = marker.names.map((name) => {
-      const mesh = new THREE.Mesh(markerGeom, markerMaterial);
-      mesh.name = name;
-      markersGroup.add(mesh);
-      return mesh;
-    });
+    let markerMeshes = [];
     const skeletonMaterial = new THREE.LineBasicMaterial({ color:0x24302d, linewidth:2 });
-    const skeletonLines = (marker.segments || []).map(([a,b]) => {
-      const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-      const line = new THREE.Line(geom, skeletonMaterial);
-      line.userData = { a, b };
-      skeletonGroup.add(line);
-      return line;
-    });
+    let skeletonLines = [];
+    function rebuildMarkerScene() {
+      markersGroup.clear();
+      skeletonGroup.clear();
+      markerMeshes = (marker.names || []).map((name) => {
+        const mesh = new THREE.Mesh(markerGeom, markerMaterial);
+        mesh.name = name;
+        markersGroup.add(mesh);
+        return mesh;
+      });
+      skeletonLines = (marker.segments || []).map(([a,b]) => {
+        const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+        const line = new THREE.Line(geom, skeletonMaterial);
+        line.userData = { a, b };
+        skeletonGroup.add(line);
+        return line;
+      });
+    }
+    rebuildMarkerScene();
     const modelSkeletonMaterial = new THREE.LineBasicMaterial({ color:0x2f6fed, linewidth:3 });
     const modelSkeletonLines = [];
 
@@ -2021,6 +2050,8 @@ def _write_visualizer_html(
     function loadGlb(url) {
       status.textContent = 'Loading GLB...';
       loader.load(url, (gltf) => {
+        const embedded = gltf.parser?.json?.extras?.monomech?.visualizer;
+        if (embedded) applyEmbeddedPayload(embedded);
         if (glbRoot) { modelGroup.remove(glbRoot); disposeObject(glbRoot); }
         glbRoot = gltf.scene;
         glbRoot.traverse((child) => {
@@ -2089,12 +2120,16 @@ def _write_visualizer_html(
       const canvas = document.getElementById(canvasId);
       const ctx = canvas.getContext('2d');
       const select = document.getElementById(selectId);
-      const cols = store?.columns || [];
       const palette = ['#0f766e', '#d65a31', '#2f6fed', '#7a4f9a', '#8a6f00', '#256c4f', '#b42318', '#475467'];
-      select.innerHTML = cols.length
-        ? `<option value="__all__">All signals (${cols.length})</option>` + cols.map(c => `<option value="${c}">${c}</option>`).join('')
-        : '<option>No data</option>';
+      function refreshSelect() {
+        const cols = store?.columns || [];
+        select.innerHTML = cols.length
+          ? `<option value="__all__">All signals (${cols.length})</option>` + cols.map(c => `<option value="${c}">${c}</option>`).join('')
+          : '<option>No data</option>';
+      }
+      refreshSelect();
       function draw() {
+        const cols = store?.columns || [];
         const rect = canvas.getBoundingClientRect();
         canvas.width = Math.max(320, Math.floor(rect.width * devicePixelRatio));
         canvas.height = Math.max(210, Math.floor(rect.height * devicePixelRatio));
@@ -2161,10 +2196,31 @@ def _write_visualizer_html(
       }
       select.addEventListener('change', draw);
       addEventListener('resize', draw);
-      return draw;
+      return { draw, refreshSelect };
     }
-    const drawIk = makeSeriesPlot('ikPlot', data.ik, 'ikSelect', '#0f766e');
-    const drawId = makeSeriesPlot('idPlot', data.id, 'idSelect', '#d65a31');
+    data.ik = data.ik || emptyStore();
+    data.id = data.id || emptyStore();
+    const ikPlot = makeSeriesPlot('ikPlot', data.ik, 'ikSelect', '#0f766e');
+    const idPlot = makeSeriesPlot('idPlot', data.id, 'idSelect', '#d65a31');
+    const drawIk = ikPlot.draw;
+    const drawId = idPlot.draw;
+
+    function applyEmbeddedPayload(embedded) {
+      if (!embedded || typeof embedded !== 'object') return;
+      data.title = embedded.title || data.title;
+      data.force_scale = embedded.force_scale || data.force_scale || 0.35;
+      Object.assign(marker, embedded.markers || emptyMarkers());
+      Object.assign(force, embedded.forces || {names:[], frames:[]});
+      Object.assign(data.ik, embedded.ik || emptyStore());
+      Object.assign(data.id, embedded.id || emptyStore());
+      if (force?.diagnostics?.warning) notice.textContent = force.diagnostics.warning;
+      else notice.textContent = 'GLB metadata loaded. Model motion, forces, IK, and inverse dynamics are synchronized.';
+      rebuildMarkerScene();
+      syncTimeline();
+      refreshStats();
+      ikPlot.refreshSelect();
+      idPlot.refreshSelect();
+    }
 
     function animate(now) {
       requestAnimationFrame(animate);

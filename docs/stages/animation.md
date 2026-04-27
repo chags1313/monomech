@@ -187,7 +187,7 @@ In a script, open `viewer.html` in a browser.
 
 The same visualizer works well on GitHub Pages because it does not need a Python server. The online page lets readers upload their own `.glb` export directly in the browser:
 
-In notebooks, `viewer.show()` displays a patched in-memory copy of the viewer and injects the GLB as a browser blob. The saved HTML on disk still references the sibling `.glb`, so local files stay smaller while notebook display avoids local-file loading problems.
+In notebooks, `viewer.show()` displays the saved HTML through Jupyter's `/files/` route when the output folder is under the notebook working directory. This is the fastest path because the browser streams the sibling `.glb` directly. If your notebook server cannot serve local files, use `viewer.show(inline_glb=True)` to display a patched in-memory copy that injects the GLB as a browser blob.
 
 You can also build the dashboard without mesh geometry:
 

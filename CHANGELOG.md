@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.15.15
+
+### Changed
+- made notebook visualizer display use Jupyter's file-serving route by default for faster GLB loading
+- kept `viewer.show(inline_glb=True)` as an explicit fallback for notebook environments that cannot serve local files
+
 ## 0.15.14
 
 ### Fixed

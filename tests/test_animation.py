@@ -4,7 +4,12 @@ import numpy as np
 import pandas as pd
 
 import monomech as mm
-from monomech.animation import _dedupe_geometry_specs, _geometry_file_aliases
+from monomech.animation import (
+    _dedupe_geometry_specs,
+    _geometry_file_aliases,
+    _inline_notebook_visualizer_html,
+    _notebook_file_url,
+)
 
 
 def test_animation_viewer_uses_relative_glb(tmp_path):
@@ -114,7 +119,19 @@ def test_opensim_visualizer_references_glb_by_default(tmp_path):
     assert result.metadata["embedded_glb"] is False
 
 
-def test_visualizer_repr_inlines_glb_for_notebooks(tmp_path):
+def test_visualizer_repr_uses_fast_file_iframe_by_default(tmp_path):
+    result = mm.OpenSimVisualizerResult(
+        html_path=Path.cwd() / "outputs" / "viewer.html",
+        metadata={},
+    )
+
+    html = result._repr_html_()
+
+    assert 'src="/files/outputs/viewer.html"' in html
+    assert "MONOMECH_GLB_BASE64" not in html
+
+
+def test_inline_notebook_visualizer_can_inject_glb_when_requested(tmp_path):
     markers = pd.DataFrame(
         {
             "hip_r_x": [0.0],
@@ -131,11 +148,18 @@ def test_visualizer_repr_inlines_glb_for_notebooks(tmp_path):
         glb_path=glb_path,
     )
 
-    html = result._repr_html_()
+    html = _inline_notebook_visualizer_html(result.html_path, result.metadata)
 
     assert "window.MONOMECH_GLB_BASE64" in html
     assert "loadGlb(url)" in html
     assert "Z2xi" in html
+
+
+def test_notebook_file_url_falls_back_for_paths_outside_cwd(tmp_path):
+    outside = tmp_path / "viewer.html"
+    outside.write_text("viewer", encoding="utf-8")
+
+    assert _notebook_file_url(outside).startswith("file:///")
 
 
 def test_animate_exposes_speed_and_reference_options(monkeypatch, tmp_path):

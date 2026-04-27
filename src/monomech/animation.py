@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from html import escape
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import numpy as np
 import pandas as pd
@@ -39,22 +40,18 @@ class OpenSimVisualizerResult:
     metadata: dict[str, Any]
 
     def _repr_html_(self) -> str:
-        try:
-            return _inline_notebook_visualizer_html(self.html_path, self.metadata)
-        except Exception:
-            pass
-        uri = self.html_path.resolve().as_uri()
+        uri = _notebook_file_url(self.html_path)
         return (
             f'<iframe src="{uri}" width="100%" height="860" '
             'style="border:0;border-radius:8px;overflow:hidden;"></iframe>'
         )
 
-    def display(self, *, width: str = "100%", height: int = 860, inline_glb: bool = True):
+    def display(self, *, width: str = "100%", height: int = 860, inline_glb: bool = False):
         """Display this visualizer in a Jupyter notebook."""
 
         return display_visualizer(self, width=width, height=height, inline_glb=inline_glb)
 
-    def show(self, *, width: str = "100%", height: int = 860, inline_glb: bool = True):
+    def show(self, *, width: str = "100%", height: int = 860, inline_glb: bool = False):
         """Alias for `display()` in notebooks."""
 
         return self.display(width=width, height=height, inline_glb=inline_glb)
@@ -65,7 +62,7 @@ def display_visualizer(
     *,
     width: str = "100%",
     height: int = 860,
-    inline_glb: bool = True,
+    inline_glb: bool = False,
 ):
     """Display a monomech visualizer from a path or pipeline result in Jupyter."""
 
@@ -91,9 +88,18 @@ def display_visualizer(
         display(frame)
         return frame
 
-    frame = IFrame(Path(html_path).expanduser().resolve().as_uri(), width=width, height=height)
+    frame = IFrame(_notebook_file_url(html_path), width=width, height=height)
     display(frame)
     return frame
+
+
+def _notebook_file_url(path: str | Path) -> str:
+    resolved = Path(path).expanduser().resolve()
+    try:
+        rel = resolved.relative_to(Path.cwd().resolve())
+        return "/files/" + quote(rel.as_posix())
+    except ValueError:
+        return resolved.as_uri()
 
 
 def _inline_notebook_visualizer_html(

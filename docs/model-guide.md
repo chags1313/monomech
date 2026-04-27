@@ -47,15 +47,19 @@ markers = mm.inspect_model_markers("models/custom_full_body.osim")
 display(markers.head(30))
 ```
 
-## Build a Marker Map
+## Check Marker Names
+
+For a custom model, compare the names in your pose/TRC result with the model marker names before scaling.
 
 ```python
-trial = mm.load_trc("walk.trc")
+model_markers = mm.inspect_model_markers("models/custom_full_body.osim")
+display(model_markers.head(30))
 
-marker_map = trial.build_marker_map("models/custom_full_body.osim")
+pose = mm.estimate_pose("subject01.mp4", root_centered=False, floored=True)
+print(pose.landmarks[:10])
 ```
 
-Use the marker map as a review tool before running OpenSim scale or IK.
+If names need to be translated, pass a `marker_map` when exporting TRC.
 
 ## Video to TRC
 
@@ -84,17 +88,6 @@ scale = mm.run_scaling(
 
 ik = mm.run_ik(
     scale,
-    output_dir="outputs/subject01/ik",
-)
-```
-
-The lower-level trial methods are still available if you prefer explicit control:
-
-```python
-trial = mm.load_trc(trc_path)
-ik = trial.run_opensim_ik(
-    model_path=scale.scaled_model_path,
-    trc_path=trc_path,
     output_dir="outputs/subject01/ik",
 )
 ```

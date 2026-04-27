@@ -1,6 +1,6 @@
 # API Reference
 
-This page summarizes the public API in the order most notebooks use it. The short functions are designed for day-to-day work; the lower-level functions remain available when you need exact control over file paths, OpenSim configs, or custom data.
+This page summarizes the public API in the order most notebooks use it. The short functions are the main workflow; advanced functions are listed near the end for custom file-oriented jobs.
 
 ## Install Extras
 
@@ -87,7 +87,7 @@ Pose and marker result objects expose:
 | `.to_trc(path, model_path=None)` | Write an OpenSim TRC. |
 | `.summary()` | Missing-data and confidence summary by landmark. |
 | `.qc_report()` | Quality-control report object. |
-| `.vis_2d(frame=...)` | White-background 2D skeleton preview. |
+| `.vis_2d(frame=...)` | 2D skeleton preview; overlays on the source video frame when available. |
 | `.vis_3d(frame=...)` | White-background 3D skeleton preview with model Y as vertical. |
 
 ```python
@@ -96,6 +96,8 @@ pose.vis_3d(frame=50)
 pose.to_csv("outputs/subject01/pose.csv")
 pose.to_trc("outputs/subject01/pose.trc")
 ```
+
+Pass `image=False` to `vis_2d()` for a skeleton-only white background, or pass an image array with `image=...` to draw on a specific frame.
 
 OpenSim storage results from IK and ID expose:
 
@@ -232,7 +234,7 @@ The `mm.external` factory exposes lower-level constructors:
 
 ## Animation And Visualization
 
-### `animate(*, ik, id=None, model=None, output_dir="outputs/visualizer", name=None, external_loads_path=None, create_glb=True)`
+### `animate(*, ik, id=None, model=None, output_dir="outputs/visualizer", name=None, external_loads_path=None, create_glb=True, mode="balanced", stride=None, decimate_target_reduction=None, decimate_error=None, thin_pos_tol=1e-4, thin_rot_tol_deg=0.05, drop_static_nodes=False, drop_origin_nodes=False, max_frames=240, marker_stride=1, embed_glb=False)`
 
 Create a notebook-ready Three.js visualizer.
 
@@ -243,13 +245,20 @@ viewer = mm.animate(
     ik=ik,
     id=id_result,
     external_loads_path=id_result.metadata["external_loads_mot_path"],
+    mode="balanced",
 )
 viewer.show()
 ```
 
-The visualizer can show the animated GLB mesh, marker fallback, force arrows, IK traces, and ID traces.
+The visualizer can show the animated GLB mesh, marker fallback, force arrows, IK traces, and ID traces. By default, the HTML references a sibling GLB file instead of embedding it, which keeps notebooks and docs responsive. Use `embed_glb=True` only when you need a single self-contained HTML file.
 
-### Lower-Level Animation Functions
+| Mode | Behavior |
+| --- | --- |
+| `preview` | Faster export for quick notebook checks. |
+| `balanced` | Default quality and size balance. |
+| `final` | Full-frame, non-decimated animation. |
+
+### Advanced Animation Functions
 
 | Function | Purpose |
 | --- | --- |
@@ -288,9 +297,9 @@ result = mm.marker_pipeline(
 result["animation"].show()
 ```
 
-## File-Oriented Pipeline Functions
+## Advanced File-Oriented Pipeline Functions
 
-These functions are stable and explicit, which makes them useful in scripts and production jobs:
+These functions are useful in scripts and production jobs where explicit paths are easier to manage:
 
 | Function | Purpose |
 | --- | --- |
@@ -310,8 +319,6 @@ These functions are stable and explicit, which makes them useful in scripts and 
 | `get_builtin_geometry_dir()` | Get packaged OpenSim geometry. |
 | `inspect_model_markers(model_path)` | Return model marker names and metadata. |
 | `build_marker_map(source_markers, model_markers)` | Build a marker-name review map. |
-| `load_video(path)` | Create a `VideoTrial`. |
-| `load_trc(path)` | Create a `MarkerTrial` from TRC. |
 | `load_marker_dataframe(df)` | Create a marker trial from a DataFrame. |
 
 ## Config Objects

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "monomech"
-version = "0.15.11"
+version = "0.15.12"
 description = "Single camera biomechanics library"
 readme = "README.md"
 license = "MIT"
@@ -66,7 +66,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://pypi.org/project/monomech/"
-Documentation = "https://github.com/chags1313/monomech"
+Documentation = "https://chags1313.github.io/monomech/"
 Repository = "https://github.com/chags1313/monomech"
 
 [tool.setuptools.packages.find]

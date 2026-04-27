@@ -104,11 +104,11 @@ trc_path = Path("data/walk.trc")
 output_dir = Path("outputs/walk")
 output_dir.mkdir(parents=True, exist_ok=True)
 
-trial = mm.load_trc(trc_path)
-print(trial.summary())
+markers = mm.gap_fill(trc_path, max_gap_frames=20)
+markers = mm.smooth(markers, cutoff_hz=6.0)
 
-trial.clean_markers(cutoff_hz=6.0)
-trial.to_trc(output_dir / "walk_clean.trc")
+display(markers.summary())
+markers.to_trc(output_dir / "walk_clean.trc")
 ```
 
 ## Good Notebook Hygiene

@@ -1389,7 +1389,7 @@ def _write_simple_glb_viewer_html(html_path: Path, *, title: str, payload: dict[
     const key = new THREE.DirectionalLight(0xffffff, 2.6);
     key.position.set(3, 5, 4);
     scene.add(key);
-    const grid = new THREE.GridHelper(4, 20, 0xb8c7c2, 0xe1e8e5);
+    const grid = new THREE.GridHelper(16, 80, 0xb8c7c2, 0xe1e8e5);
     scene.add(grid);
 
     const loader = new GLTFLoader();
@@ -1876,7 +1876,7 @@ def _write_visualizer_html(
     const key = new THREE.DirectionalLight(0xffffff, 2.6);
     key.position.set(3, 5, 4);
     scene.add(key);
-    scene.add(new THREE.GridHelper(4, 20, 0xb7c7c2, 0xdfe9e5));
+    scene.add(new THREE.GridHelper(16, 80, 0xb7c7c2, 0xdfe9e5));
 
     const markersGroup = new THREE.Group();
     const skeletonGroup = new THREE.Group();
@@ -2229,7 +2229,7 @@ def save_opensim_visualizer(
     title: str = "monomech IK and ID visualizer",
     max_frames: int = 240,
     marker_stride: int = 1,
-    embed_glb: bool = True,
+    embed_glb: bool = False,
 ) -> OpenSimVisualizerResult:
     """Write a notebook-ready HTML dashboard for IK, ID, forces, and 3D motion."""
 

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.15.12
+
+### Added
+- added source-frame overlays to `vis_2d()` and a mid-hip to mid-shoulder trunk connection in 2D and 3D previews
+- added `animate()` quality presets and direct speed/file-size controls
+
+### Changed
+- made `animate()` and the full IK/ID visualizer reference sibling GLB files by default instead of embedding the binary in the HTML
+- widened the Three.js visualizer floor for full-body motion review
+- recentered docs and README examples around the simplified notebook-first API
+
 ## 0.15.11
 
 ### Fixed

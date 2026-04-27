@@ -72,14 +72,14 @@ id_result = mm.run_id(
     output_dir="outputs/subject01/id",
 )
 
-animation = mm.save_opensim_animation(
-    osim_path=scale.scaled_model_path,
-    mot_path=ik.path,
-    id_path=id_result.path,
-    out_glb_path="outputs/subject01/animation/subject01_ik_id.glb",
-    stride=2,
-    decimate_target_reduction=0.35,
+animation = mm.animate(
+    ik=ik,
+    id=id_result,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    output_dir="outputs/subject01/visualizer",
+    mode="balanced",
 )
+animation.show()
 ```
 
 That is the complete review path: video in, pose tracking, OpenSim scale, IK, external loads, ID, and a browser-ready animated model out.
@@ -130,7 +130,7 @@ viewer = mm.save_animation_viewer(
 print(viewer)
 ```
 
-Open `viewer.html` in a browser to inspect the animation. By default, the GLB is embedded into the HTML when you provide `glb_path`, so the model appears immediately in notebooks, local files, and shared HTML exports. The viewer also has an **Upload GLB** control, so you can reuse the same page with a new exported model.
+Open `viewer.html` in a browser to inspect the animation. The lightweight viewer embeds the GLB so it can travel as one file. The full IK/ID dashboard created by `mm.animate()` references a sibling GLB by default, which keeps notebooks fast. Pass `embed_glb=True` to `mm.animate()` only when you need one self-contained HTML file.
 
 ## Notebook IK/ID Dashboard
 
@@ -177,6 +177,7 @@ animation = mm.animate(
     id=id_result,
     external_loads_path=id_result.metadata["external_loads_mot_path"],
     output_dir="outputs/subject01/visualizer",
+    mode="preview",  # use "balanced" or "final" for higher quality
 )
 
 animation.show()
@@ -231,7 +232,29 @@ viewer = mm.save_opensim_visualizer(
 
 ## File Size And Speed
 
-Use these knobs when the GLB is too large or export takes too long:
+`mm.animate()` has three production presets:
+
+| Mode | Use when |
+| --- | --- |
+| `mode="preview"` | Fast notebook review. Uses a larger stride and stronger mesh reduction. |
+| `mode="balanced"` | Default. Good quality with practical notebook load times. |
+| `mode="final"` | Highest fidelity. Uses every IK frame and no default decimation. |
+
+Override any preset directly:
+
+```python
+viewer = mm.animate(
+    ik=ik,
+    id=id_result,
+    mode="preview",
+    stride=4,
+    decimate_target_reduction=0.5,
+    max_frames=160,
+    embed_glb=False,
+)
+```
+
+For direct GLB export, use these knobs when the file is too large or export takes too long:
 
 | Option | What it does |
 | --- | --- |
@@ -255,21 +278,6 @@ animation = mm.save_opensim_animation(
 ```
 
 For final review, reduce or remove decimation and use `stride=1`.
-
-## Compatibility Wrapper
-
-Older notebooks can keep using the original call shape:
-
-```python
-marker_df = mm.save_ik_animation(
-    "model.osim",
-    "Geometry",
-    "ik.mot",
-    "motion.glb",
-)
-```
-
-New code should prefer `save_opensim_animation()` because it returns paths, metadata, and marker data together.
 
 ## Troubleshooting
 

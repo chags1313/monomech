@@ -8,15 +8,18 @@ from monomech.results import OpenSimScaleResult, Pose3DGlobalResult, StorageResu
 
 
 def _pose_with_gap() -> Pose3DGlobalResult:
-    data = np.zeros((5, 2, 3), dtype=float)
+    data = np.zeros((5, 4, 3), dtype=float)
     data[:, 0, 0] = np.arange(5, dtype=float)
     data[:, 1, 0] = np.arange(5, dtype=float) + 1.0
+    data[:, 2, 1] = 1.0
+    data[:, 3, 0] = 1.0
+    data[:, 3, 1] = 1.0
     data[2, 0, 0] = np.nan
     return Pose3DGlobalResult(
         name="pose",
         data=data,
         time=np.arange(5, dtype=float) / 30.0,
-        landmark_names=["left_hip", "right_hip"],
+        landmark_names=["left_hip", "right_hip", "left_shoulder", "right_shoulder"],
         dims=("x_m", "y_m", "z_m"),
         fps=30.0,
     )
@@ -44,11 +47,30 @@ def test_pose_preview_defaults_are_light_and_y_up():
     ax2 = pose.vis_2d(show=False)
     assert ax2.get_facecolor() == (1.0, 1.0, 1.0, 1.0)
     assert not ax2.yaxis_inverted()
+    assert len(ax2.lines) >= 3
 
     ax3 = pose.vis_3d(show=False)
     assert ax3.get_facecolor() == (1.0, 1.0, 1.0, 1.0)
     assert ax3.get_zlabel() == "Y"
     assert ax3.get_ylabel() == "Z"
+    assert len(ax3.lines) >= 3
+    plt.close("all")
+
+
+def test_pose_preview_can_overlay_source_image():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    pose = _pose_with_gap().gap_fill(max_gap_frames=3)
+    image = np.ones((120, 160, 3), dtype=float)
+
+    ax = pose.vis_2d(frame=0, image=image, show=False)
+
+    assert len(ax.images) == 1
+    assert ax.get_xlim() == (0.0, 160.0)
+    assert ax.yaxis_inverted()
     plt.close("all")
 
 

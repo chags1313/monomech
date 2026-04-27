@@ -11,6 +11,79 @@ from .filters import apply_smoothing, gap_fill_array
 from .landmarks import SEGMENTS
 from .qc import QCReport
 
+_LEFT_HIP_NAMES = ("left_hip", "hip_l", "l_hip", "LHip")
+_RIGHT_HIP_NAMES = ("right_hip", "hip_r", "r_hip", "RHip")
+_LEFT_SHOULDER_NAMES = ("left_shoulder", "shoulder_l", "l_shoulder", "LShoulder")
+_RIGHT_SHOULDER_NAMES = ("right_shoulder", "shoulder_r", "r_shoulder", "RShoulder")
+
+
+def _first_present(index: dict[str, int], names: tuple[str, ...]) -> int | None:
+    lower = {name.lower(): idx for name, idx in index.items()}
+    for name in names:
+        if name in index:
+            return index[name]
+        if name.lower() in lower:
+            return lower[name.lower()]
+    return None
+
+
+def _midpoint_for_pair(
+    pts: np.ndarray,
+    index: dict[str, int],
+    left_names: tuple[str, ...],
+    right_names: tuple[str, ...],
+    dims: int,
+) -> np.ndarray | None:
+    left_idx = _first_present(index, left_names)
+    right_idx = _first_present(index, right_names)
+    if left_idx is None or right_idx is None:
+        return None
+    left = pts[left_idx, :dims]
+    right = pts[right_idx, :dims]
+    if not (np.isfinite(left).all() and np.isfinite(right).all()):
+        return None
+    return (left + right) / 2.0
+
+
+def _image_array_from_input(image: Any):
+    if image is None or image is False:
+        return None
+    if isinstance(image, np.ndarray):
+        return image
+    try:
+        import matplotlib.image as mpimg
+    except Exception:
+        return None
+    try:
+        return mpimg.imread(Path(image))
+    except Exception:
+        return None
+
+
+def _video_frame_for_pose2d(pose2d: Any, frame: int):
+    metadata = getattr(pose2d, "metadata", None) or {}
+    video_path = metadata.get("video_path")
+    if not video_path:
+        return None
+    try:
+        import cv2
+    except Exception:
+        return None
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        return None
+    try:
+        fps = float(metadata.get("source_fps") or getattr(pose2d, "fps", None) or 30.0)
+        time = getattr(pose2d, "time", None)
+        source_frame = int(round(float(time[frame]) * fps)) if time is not None else frame
+        cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, source_frame))
+        ok, bgr = cap.read()
+        if not ok:
+            return None
+        return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    finally:
+        cap.release()
+
 
 @dataclass(slots=True)
 class BaseResult:
@@ -218,8 +291,10 @@ class BaseResult:
         background: str = "white",
         line_width: float = 2.0,
         marker_size: float = 28.0,
+        image: Any | None = None,
+        image_alpha: float = 1.0,
     ):
-        """Draw one pose frame as a clean 2D skeleton."""
+        """Draw one pose frame as a clean 2D skeleton, optionally over the source image."""
 
         try:
             import matplotlib.pyplot as plt
@@ -229,16 +304,34 @@ class BaseResult:
             ) from exc
 
         frame = int(np.clip(frame, 0, self.frames - 1))
-        pts = np.asarray(self.data[frame], dtype=float)
+        plot_result = self
+        image_arr = _image_array_from_input(image)
+        if image is None:
+            pose2d = (self.metadata or {}).get("pose2d_result")
+            if pose2d is not None and getattr(pose2d, "frames", 0):
+                plot_result = pose2d
+                frame = int(np.clip(frame, 0, pose2d.frames - 1))
+                image_arr = _video_frame_for_pose2d(pose2d, frame)
+
+        pts = np.asarray(plot_result.data[frame], dtype=float)
         if pts.shape[1] < 2:
             raise ValueError("2D visualization requires at least two coordinate dimensions.")
+
+        if image_arr is not None and pts[:, :2].size:
+            height, width = image_arr.shape[:2]
+            if np.nanmax(np.abs(pts[:, 0])) <= 2.0 and np.nanmax(np.abs(pts[:, 1])) <= 2.0:
+                pts = pts.copy()
+                pts[:, 0] *= width
+                pts[:, 1] *= height
 
         if ax is None:
             _, ax = plt.subplots(figsize=(7, 7))
         ax.set_facecolor(background)
         ax.figure.set_facecolor(background)
+        if image_arr is not None:
+            ax.imshow(image_arr, alpha=float(image_alpha), zorder=0)
 
-        index = {name: i for i, name in enumerate(self.landmark_names)}
+        index = {name: i for i, name in enumerate(plot_result.landmark_names)}
         for a_name, b_name in SEGMENTS.values():
             if a_name not in index or b_name not in index:
                 continue
@@ -247,14 +340,37 @@ class BaseResult:
             if np.isfinite(a).all() and np.isfinite(b).all():
                 ax.plot([a[0], b[0]], [a[1], b[1]], color=color, linewidth=line_width, alpha=0.9)
 
+        mid_hip = _midpoint_for_pair(pts, index, _LEFT_HIP_NAMES, _RIGHT_HIP_NAMES, 2)
+        mid_shoulder = _midpoint_for_pair(
+            pts, index, _LEFT_SHOULDER_NAMES, _RIGHT_SHOULDER_NAMES, 2
+        )
+        if mid_hip is not None and mid_shoulder is not None:
+            ax.plot(
+                [mid_hip[0], mid_shoulder[0]],
+                [mid_hip[1], mid_shoulder[1]],
+                color=color,
+                linewidth=line_width,
+                alpha=0.9,
+            )
+
         valid = np.isfinite(pts[:, :2]).all(axis=1)
         ax.scatter(
-            pts[valid, 0], pts[valid, 1], s=marker_size, c=color, edgecolors="none", zorder=3
+            pts[valid, 0],
+            pts[valid, 1],
+            s=marker_size,
+            c=color,
+            edgecolors="white" if image_arr is not None else "none",
+            linewidths=0.7 if image_arr is not None else 0.0,
+            zorder=3,
         )
         ax.set_aspect("equal", adjustable="box")
+        if image_arr is not None:
+            height, width = image_arr.shape[:2]
+            ax.set_xlim(0, width)
+            ax.set_ylim(height, 0)
         ax.set_xticks([])
         ax.set_yticks([])
-        ax.set_title(f"{self.name} frame {frame}", color=color)
+        ax.set_title(f"{plot_result.name} frame {frame}", color=color)
         for spine in ax.spines.values():
             spine.set_visible(False)
         if show:
@@ -307,6 +423,20 @@ class BaseResult:
                     linewidth=line_width,
                     alpha=0.9,
                 )
+
+        mid_hip = _midpoint_for_pair(pts, index, _LEFT_HIP_NAMES, _RIGHT_HIP_NAMES, 3)
+        mid_shoulder = _midpoint_for_pair(
+            pts, index, _LEFT_SHOULDER_NAMES, _RIGHT_SHOULDER_NAMES, 3
+        )
+        if mid_hip is not None and mid_shoulder is not None:
+            ax.plot(
+                [mid_hip[0], mid_shoulder[0]],
+                [mid_hip[2], mid_shoulder[2]],
+                [mid_hip[1], mid_shoulder[1]],
+                color=color,
+                linewidth=line_width,
+                alpha=0.9,
+            )
 
         valid = np.isfinite(pts[:, :3]).all(axis=1)
         ax.scatter(

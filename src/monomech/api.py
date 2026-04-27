@@ -339,6 +339,17 @@ def animate(
     name: str | None = None,
     external_loads_path: str | Path | None = None,
     create_glb: bool = True,
+    mode: Literal["preview", "balanced", "final"] = "balanced",
+    stride: int | None = None,
+    decimate_target_reduction: float | None = None,
+    decimate_error: float | None = None,
+    thin_pos_tol: float | None = 1e-4,
+    thin_rot_tol_deg: float | None = 0.05,
+    drop_static_nodes: bool = False,
+    drop_origin_nodes: bool = False,
+    max_frames: int = 240,
+    marker_stride: int = 1,
+    embed_glb: bool = False,
 ) -> OpenSimVisualizerResult:
     """Create a notebook-ready OpenSim animation visualizer."""
 
@@ -352,6 +363,37 @@ def animate(
     model_path = _resolve_model(model or (metadata or {}).get("model_path"))
     out = ensure_dir(output_dir)
     stem = name or ik_path.stem.replace("_ik", "")
+    presets = {
+        "preview": {
+            "stride": 3,
+            "decimate_target_reduction": 0.55,
+            "marker_stride": max(2, marker_stride),
+            "max_frames": min(max_frames, 160),
+        },
+        "balanced": {
+            "stride": 2,
+            "decimate_target_reduction": 0.35,
+            "marker_stride": marker_stride,
+            "max_frames": max_frames,
+        },
+        "final": {
+            "stride": 1,
+            "decimate_target_reduction": None,
+            "marker_stride": marker_stride,
+            "max_frames": max_frames,
+        },
+    }
+    if mode not in presets:
+        raise ValueError("mode must be one of: 'preview', 'balanced', or 'final'.")
+    preset = presets[mode]
+    animation_stride = int(stride or preset["stride"])
+    animation_decimation = (
+        decimate_target_reduction
+        if decimate_target_reduction is not None
+        else preset["decimate_target_reduction"]
+    )
+    viewer_marker_stride = int(preset["marker_stride"])
+    viewer_max_frames = int(preset["max_frames"])
 
     glb_path = None
     if create_glb:
@@ -362,6 +404,13 @@ def animate(
             id_path=id_path,
             external_loads_path=external_loads_path,
             out_glb_path=out / f"{stem}.glb",
+            stride=animation_stride,
+            thin_pos_tol=thin_pos_tol,
+            thin_rot_tol_deg=thin_rot_tol_deg,
+            drop_static_nodes=drop_static_nodes,
+            decimate_target_reduction=animation_decimation,
+            decimate_error=decimate_error,
+            drop_origin_nodes=drop_origin_nodes,
         )
         glb_path = animation.glb_path
 
@@ -372,6 +421,9 @@ def animate(
         id_path=id_path,
         external_loads_path=external_loads_path,
         glb_path=glb_path,
+        max_frames=viewer_max_frames,
+        marker_stride=viewer_marker_stride,
+        embed_glb=embed_glb,
     )
 
 

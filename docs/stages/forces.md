@@ -15,7 +15,7 @@ Inverse dynamics combines four things:
 | External loads | Ground reaction forces or other applied forces. |
 | Shared time range | The IK and force data must overlap in time. |
 
-When you pass `external_forces=...` to `run_opensim_id()`, `monomech` writes both files OpenSim expects:
+When you pass `external_forces=...` to `mm.run_id()`, `monomech` writes both files OpenSim expects:
 
 - `*_external_loads.mot`
 - `*_ExternalLoads.xml`
@@ -230,9 +230,8 @@ Disable automatic fixes when you want failures instead of interpolation:
 ```python
 from monomech import OpenSimIDConfig
 
-id_result = trial.run_opensim_id(
-    model_path=scale.scaled_model_path,
-    ik_path=ik.path,
+id_result = mm.run_id(
+    ik=ik,
     external_forces=estimated_loads,
     config=OpenSimIDConfig(sanitize_coordinates=False),
 )
@@ -242,7 +241,7 @@ id_result = trial.run_opensim_id(
 
 | Problem | Fix |
 | --- | --- |
-| Force data has a different sampling rate than IK | Pass the load to `run_opensim_id()`; it is resampled automatically. |
+| Force data has a different sampling rate than IK | Pass the load to `mm.run_id()`; it is resampled automatically. |
 | A force plate file has isolated NaNs | Let the generated MOT fill non-finite values, then inspect the file before interpretation. |
 | ID succeeds but moments look implausible | Check force signs, center-of-pressure units, `applied_to_body`, and coordinate frames. |
 | Estimated GRF produces no loads | Confirm global pose includes foot landmarks such as `left_heel`, `left_foot_index`, and `left_ankle`. |

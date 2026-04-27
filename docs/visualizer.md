@@ -13,12 +13,11 @@ Use the browser visualizer to inspect a monomech `.glb` animation without instal
 For a full exported dashboard with synchronized markers, external forces, IK plots, and ID plots, create it from Python:
 
 ```python
-viewer = mm.save_opensim_visualizer(
-    "outputs/subject01/animation/ik_id_viewer.html",
-    osim_path=scale.scaled_model_path,
-    ik_path=ik.path,
-    id_path=id_result.path,
+viewer = mm.animate(
+    ik=ik,
+    id=id_result,
+    output_dir="outputs/subject01/visualizer",
     external_loads_path=id_result.metadata["external_loads_mot_path"],
-    glb_path=animation.glb_path,
 )
+viewer.show()
 ```

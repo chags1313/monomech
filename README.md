@@ -104,6 +104,7 @@ animation = mm.animate(
     id=id_result,
     external_loads_path=id_result.metadata["external_loads_mot_path"],
     output_dir="outputs/curl/visualizer",
+    mode="balanced",
 )
 animation.show()
 ```
@@ -171,19 +172,17 @@ print(animation.glb_path)
 Create a notebook-friendly Three.js dashboard with the animated model, marker fallback, force arrows, IK plots, and ID plots:
 
 ```python
-viewer = mm.save_opensim_visualizer(
-    "outputs/subject01/animation/ik_id_viewer.html",
-    osim_path="models/subject01_scaled.osim",
-    ik_path=result.ik.path,
-    id_path=result.id.path,
+viewer = mm.animate(
+    ik=result.ik,
+    id=result.id,
+    model="models/subject01_scaled.osim",
+    output_dir="outputs/subject01/visualizer",
     external_loads_path=result.id.metadata["external_loads_mot_path"],
-    glb_path=animation.glb_path,
 )
-
-viewer
+viewer.show()
 ```
 
-The dashboard is a standalone HTML file, so it works in notebooks, local browsers, and GitHub Pages. When `glb_path` is provided, the GLB is embedded so the animated mesh loads immediately. The online visualizer starts empty and includes an **Upload GLB** control, which lets a reader drag in their own exported model without sending the file anywhere.
+The dashboard is a standalone HTML file, so it works in notebooks, local browsers, and GitHub Pages. `mm.animate()` writes the GLB next to the HTML and references that file by default, which keeps notebooks fast. Pass `embed_glb=True` only when you need one self-contained HTML file. The online visualizer starts empty and includes an **Upload GLB** control, which lets a reader drag in their own exported model without sending the file anywhere.
 
 For a carried object plus estimated ground-reaction forces:
 
@@ -280,8 +279,8 @@ Add `--opensim` when OpenSim-compatible bindings are installed.
 GitHub Actions builds distributions on every push to `main`. PyPI publishing goes directly to PyPI through trusted publishing and is triggered by version tags such as:
 
 ```bash
-git tag v0.15.11
-git push origin v0.15.11
+git tag v0.15.12
+git push origin v0.15.12
 ```
 
 The publish workflow can also be run manually from GitHub Actions with the `publish` input set to `true`.

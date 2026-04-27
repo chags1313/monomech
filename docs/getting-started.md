@@ -80,7 +80,7 @@ pose = mm.smooth(pose, cutoff_hz=6.0)
 pose = mm.gap_fill(pose, max_gap_frames=12)
 
 display(pose.summary().head())
-pose.vis_2d(frame=50)
+pose.vis_2d(frame=50)  # overlays the 2D skeleton on the source frame when available
 pose.vis_3d(frame=50)
 ```
 
@@ -89,20 +89,6 @@ Export the global pose:
 ```python
 pose.to_csv(output_dir / "subject01_global.csv")
 trc_path = pose.to_trc(output_dir / "subject01_global.trc")
-```
-
-The lower-level trial object is still available when you want each pose stage separately:
-
-```python
-trial = mm.load_video(video_path)
-run = trial.run_pipeline(
-    export_csv=True,
-    export_trc=True,
-    output_dir=output_dir,
-)
-
-print(run.csv_paths)
-print(run.trc_path)
 ```
 
 ## Marker-First Workflow
@@ -117,24 +103,10 @@ trc_path = Path("data/walk.trc")
 output_dir = Path("outputs/walk")
 output_dir.mkdir(parents=True, exist_ok=True)
 
-trial = mm.load_trc(trc_path)
-```
-
-Inspect markers before cleaning:
-
-```python
-print(trial.marker_names[:10])
-print(trial.sampling_rate)
-print(trial.time_range)
-display(trial.summary().head())
-```
-
-Clean and export:
-
-```python
 markers = mm.gap_fill(trc_path, max_gap_frames=20)
 markers = mm.smooth(markers, cutoff_hz=6.0)
 
+display(markers.summary().head())
 clean_trc = markers.to_trc(output_dir / "walk_clean.trc")
 print(clean_trc)
 ```
@@ -179,6 +151,21 @@ id_result = mm.run_id(
 
 print(id_result.path)
 ```
+
+Create the notebook visualizer:
+
+```python
+viewer = mm.animate(
+    ik=ik,
+    id=id_result,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    output_dir="outputs/subject01/visualizer",
+    mode="balanced",
+)
+viewer.show()
+```
+
+`animate()` writes a GLB next to the HTML and references it from the page. This keeps notebooks responsive. Use `embed_glb=True` only when you need one self-contained HTML file.
 
 !!! warning "Estimated forces are for workflow testing"
     `estimate_grf()` is useful for examples and rough exploratory runs. Use measured force plates or another validated force source when kinetics need to be interpreted scientifically.

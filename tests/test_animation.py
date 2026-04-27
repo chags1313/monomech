@@ -90,6 +90,73 @@ def test_opensim_visualizer_writes_dashboard_without_glb(tmp_path):
     assert result.metadata["force_count"] == 1
 
 
+def test_opensim_visualizer_references_glb_by_default(tmp_path):
+    markers = pd.DataFrame(
+        {
+            "hip_r_x": [0.0],
+            "hip_r_y": [0.0],
+            "hip_r_z": [0.0],
+        },
+        index=pd.Index([0.0], name="time"),
+    )
+    glb_path = tmp_path / "motion.glb"
+    glb_path.write_bytes(b"glb")
+
+    result = mm.save_opensim_visualizer(
+        tmp_path / "viewer.html",
+        marker_dataframe=markers,
+        glb_path=glb_path,
+    )
+
+    text = result.html_path.read_text(encoding="utf-8")
+    assert '"glb_path": "motion.glb"' in text
+    assert "data:model/gltf-binary;base64" not in text
+    assert result.metadata["embedded_glb"] is False
+
+
+def test_animate_exposes_speed_and_reference_options(monkeypatch, tmp_path):
+    ik_path = tmp_path / "trial_ik.mot"
+    ik_path.write_text("endheader\ntime pelvis_tx\n0.0 0.0\n", encoding="utf-8")
+    model_path = tmp_path / "model.osim"
+    model_path.write_text("<OpenSimDocument />", encoding="utf-8")
+    captured = {}
+
+    def fake_animation(**kwargs):
+        captured["animation"] = kwargs
+
+        class Result:
+            glb_path = kwargs["out_glb_path"]
+
+        Result.glb_path.write_bytes(b"glb")
+        return Result()
+
+    def fake_visualizer(html_path, **kwargs):
+        captured["visualizer"] = {"html_path": html_path, **kwargs}
+        html_path = Path(html_path)
+        html_path.write_text("viewer", encoding="utf-8")
+        return mm.OpenSimVisualizerResult(html_path=html_path, metadata=kwargs)
+
+    monkeypatch.setattr("monomech.api.save_opensim_animation", fake_animation)
+    monkeypatch.setattr("monomech.api.save_opensim_visualizer", fake_visualizer)
+    monkeypatch.setattr("monomech.api.get_builtin_geometry_dir", lambda: tmp_path)
+
+    result = mm.animate(
+        ik=ik_path,
+        model=model_path,
+        output_dir=tmp_path / "viz",
+        mode="preview",
+        stride=4,
+        decimate_target_reduction=0.25,
+        embed_glb=False,
+    )
+
+    assert result.html_path.name == "trial.html"
+    assert captured["animation"]["stride"] == 4
+    assert captured["animation"]["decimate_target_reduction"] == 0.25
+    assert captured["visualizer"]["embed_glb"] is False
+    assert captured["visualizer"]["max_frames"] == 160
+
+
 def test_visualizer_keeps_all_storage_signals(tmp_path):
     times = np.array([0.0, 0.5, 1.0])
     markers = pd.DataFrame(

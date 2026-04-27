@@ -292,6 +292,11 @@ def _write_external_loads_data(
 
     for spec in specs:
         df = spec.data.copy()
+        if time_vector is not None and (spec.metadata or {}).get("use_trial_time"):
+            if len(time_vector) < 2:
+                raise ValueError("A full-trial external load needs at least two IK time samples.")
+            df = df.iloc[[0, -1]].copy().reset_index(drop=True)
+            df["time"] = [float(time_vector[0]), float(time_vector[-1])]
 
         if spec.time_column != "time":
             df = df.rename(columns={spec.time_column: "time"})
@@ -392,6 +397,33 @@ def _write_external_loads_data(
     ET.ElementTree(root).write(xml_path, encoding="utf-8", xml_declaration=True)
 
     return mot_path, xml_path
+
+
+def _validate_external_load_bodies(osim, model_path: Path, loads) -> dict:
+    specs = loads if isinstance(loads, list) else [loads]
+    specs = [spec for spec in specs if isinstance(spec, ExternalLoadsSpec)]
+    if not specs:
+        return {"validated": False, "load_count": 0, "body_names": []}
+
+    model = osim.Model(str(model_path))
+    body_set = model.getBodySet()
+    body_names = {body_set.get(i).getName() for i in range(body_set.getSize())}
+    body_names.add("ground")
+    missing = sorted(
+        {spec.applied_to_body for spec in specs if spec.applied_to_body not in body_names}
+    )
+    if missing:
+        sample = ", ".join(sorted(body_names)[:12])
+        raise ValueError(
+            "External load applied_to_body does not match the OpenSim model: "
+            f"{missing}. Use one of the model body names, for example: {sample}"
+        )
+    return {
+        "validated": True,
+        "load_count": len(specs),
+        "applied_to_body": [spec.applied_to_body for spec in specs],
+    }
+
 
 def _resolve_scale_time_range(
     trc_path: str | Path,
@@ -788,9 +820,13 @@ def run_id(
 
     external_mot = None
     external_xml = None
+    external_loads_validation = None
 
     if external_forces is not None:
         ik_time = _read_storage_time_vector(ik_path)
+        external_loads_validation = _validate_external_load_bodies(
+            osim, model_path, external_forces
+        )
         external_mot, external_xml = _write_external_loads_data(
             external_forces,
             output_dir,
@@ -881,6 +917,7 @@ def run_id(
             "setup_xml_path": str(setup_xml_path),
             "external_loads_xml_path": None if external_xml is None else str(external_xml),
             "external_loads_mot_path": None if external_mot is None else str(external_mot),
+            "external_loads_validation": external_loads_validation,
             "run_return": ok,
             "coordinate_preflight": coordinate_preflight,
             "log_path": str(log_path),

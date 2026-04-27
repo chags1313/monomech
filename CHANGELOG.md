@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.15.13
+
+### Changed
+- made convenience carried and constant loads apply for the full IK trial by default
+
+### Fixed
+- expanded full-trial loads to the actual IK time vector when writing OpenSim external-load MOT files
+- added OpenSim body-name validation before inverse dynamics writes external-load XML
+
 ## 0.15.12
 
 ### Added

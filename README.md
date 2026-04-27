@@ -109,6 +109,8 @@ animation = mm.animate(
 animation.show()
 ```
 
+Carried and constant loads created without `start_time` and `end_time` are applied over the full IK trial. Use explicit times only for loads that turn on and off during the movement.
+
 For batch scripts, use the one-call aliases:
 
 ```python
@@ -279,8 +281,8 @@ Add `--opensim` when OpenSim-compatible bindings are installed.
 GitHub Actions builds distributions on every push to `main`. PyPI publishing goes directly to PyPI through trusted publishing and is triggered by version tags such as:
 
 ```bash
-git tag v0.15.12
-git push origin v0.15.12
+git tag v0.15.13
+git push origin v0.15.13
 ```
 
 The publish workflow can also be run manually from GitHub Actions with the `publish` input set to `true`.

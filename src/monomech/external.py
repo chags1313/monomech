@@ -123,8 +123,8 @@ class _ExternalFactory:
         applied_to_body: str,
         force: tuple[float, float, float],
         point: tuple[float, float, float] = (0.0, 0.0, 0.0),
-        start_time: float,
-        end_time: float,
+        start_time: float | None = None,
+        end_time: float | None = None,
         name: str = "manual_load",
         force_expressed_in: str = "/ground",
         point_expressed_in: str | None = None,
@@ -132,12 +132,22 @@ class _ExternalFactory:
         if point_expressed_in is None:
             point_expressed_in = applied_to_body
 
-        if not end_time > start_time:
+        use_trial_time = start_time is None and end_time is None
+        if use_trial_time:
+            data_start = 0.0
+            data_end = 1.0
+        elif start_time is None or end_time is None:
+            raise ValueError("Provide both start_time and end_time, or leave both unset.")
+        else:
+            data_start = float(start_time)
+            data_end = float(end_time)
+
+        if not data_end > data_start:
             raise ValueError("end_time must be greater than start_time")
 
         df = pd.DataFrame(
             {
-                "time": [float(start_time), float(end_time)],
+                "time": [data_start, data_end],
                 "Fx": [float(force[0]), float(force[0])],
                 "Fy": [float(force[1]), float(force[1])],
                 "Fz": [float(force[2]), float(force[2])],
@@ -165,8 +175,9 @@ class _ExternalFactory:
             source="manual",
             is_estimated=False,
             metadata={
-                "start_time": float(start_time),
-                "end_time": float(end_time),
+                "start_time": None if start_time is None else float(start_time),
+                "end_time": None if end_time is None else float(end_time),
+                "use_trial_time": bool(use_trial_time),
             },
         )
 
@@ -178,8 +189,8 @@ class _ExternalFactory:
         applied_to_body: str | None = None,
         point: tuple[float, float, float] = (0.0, 0.0, 0.0),
         direction: str = "global_down",
-        start_time: float = 0.0,
-        end_time: float = 1.0,
+        start_time: float | None = None,
+        end_time: float | None = None,
         name: str = "carried_load",
     ) -> ExternalLoadsSpec:
         g = 9.81

@@ -224,8 +224,8 @@ def load(
     mass_kg: float | None = None,
     force: tuple[float, float, float] | None = None,
     point: tuple[float, float, float] = (0.0, 0.0, 0.0),
-    start_time: float = 0.0,
-    end_time: float = 1.0,
+    start_time: float | None = None,
+    end_time: float | None = None,
     name: str | None = None,
 ) -> ExternalLoadsSpec:
     """Create an external load with production-friendly defaults."""

@@ -114,6 +114,44 @@ def test_external_load_resampling_removes_nans(tmp_path: Path):
     assert np.isfinite(numeric).all()
 
 
+def test_full_trial_external_load_expands_to_ik_time(tmp_path: Path):
+    load = mm.load(type="carried", body="hand_r", mass_kg=10.0)
+
+    mot_path, xml_path = _write_external_loads_data(
+        load,
+        tmp_path,
+        "trial",
+        time_vector=np.array([2.0, 2.5, 3.0]),
+    )
+
+    table = read_storage(mot_path)
+    assert np.allclose(table["time"], [2.0, 2.5, 3.0])
+    assert np.allclose(table["carried_load_vy"], -98.1)
+    xml = xml_path.read_text(encoding="utf-8")
+    assert "<applied_to_body>hand_r</applied_to_body>" in xml
+    assert "<point_expressed_in_body>hand_r</point_expressed_in_body>" in xml
+
+
+def test_explicit_external_load_window_stays_time_limited(tmp_path: Path):
+    load = mm.load(
+        type="constant",
+        body="hand_r",
+        force=(0.0, -10.0, 0.0),
+        start_time=2.25,
+        end_time=2.75,
+    )
+
+    mot_path, _ = _write_external_loads_data(
+        load,
+        tmp_path,
+        "trial",
+        time_vector=np.array([2.0, 2.5, 3.0]),
+    )
+
+    table = read_storage(mot_path)
+    assert np.allclose(table["constant_load_vy"], [0.0, -10.0, 0.0])
+
+
 def test_read_storage_time_vector_handles_padded_opensim_rows(tmp_path: Path):
     storage_path = tmp_path / "ik.mot"
     storage_path.write_text(

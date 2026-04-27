@@ -169,7 +169,7 @@ If `ik` was produced by `run_ik()`, the model path is carried in metadata. Pass 
 
 ## External Loads
 
-### `load(type="carried", *, body=None, applied_to_body=None, mass_kg=None, force=None, point=(0, 0, 0), start_time=0, end_time=1, name=None)`
+### `load(type="carried", *, body=None, applied_to_body=None, mass_kg=None, force=None, point=(0, 0, 0), start_time=None, end_time=None, name=None)`
 
 Create a simple external load.
 
@@ -180,6 +180,8 @@ dumbbell = mm.load(
     mass_kg=10.0,
 )
 ```
+
+When `start_time` and `end_time` are left unset, the load is active for the full IK trial passed to `mm.run_id()`. Pass both values for a time-limited load.
 
 For a constant force:
 

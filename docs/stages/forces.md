@@ -124,7 +124,19 @@ For the common carried-load case:
 bag_load = mm.load(type="carried", body="hand_r", mass_kg=5.0)
 ```
 
-`mm.load(type="carried", ...)` creates the same OpenSim external load as `mm.external.carried_load(...)`, but keeps the common notebook workflow concise.
+`mm.load(type="carried", ...)` creates the same OpenSim external load as `mm.external.carried_load(...)`, but keeps the common notebook workflow concise. By default, the load is active for the full IK trial. Pass both `start_time=` and `end_time=` only when the load should be time-limited.
+
+```python
+brief_push = mm.load(
+    type="constant",
+    body="hand_r",
+    force=(40.0, 0.0, 0.0),
+    start_time=0.5,
+    end_time=1.2,
+)
+```
+
+`body=` must match a body in the OpenSim model. `mm.run_id()` checks this before launching inverse dynamics and records the validated body names in `id_result.metadata["external_loads_validation"]`.
 
 For a full video-to-ID run, combine estimated ground-reaction forces with the carried load in one argument:
 

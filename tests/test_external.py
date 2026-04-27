@@ -20,6 +20,16 @@ def test_carried_load_accepts_applied_to_body_alias():
     assert load.data["Py"].iloc[0] == -0.2
 
 
+def test_carried_load_defaults_to_full_trial_window():
+    load = mm.load(type="carried", body="hand_r", mass_kg=10.0)
+
+    assert load.metadata["use_trial_time"] is True
+    assert load.metadata["start_time"] is None
+    assert load.metadata["end_time"] is None
+    assert load.applied_to_body == "hand_r"
+    assert load.point_expressed_in == "hand_r"
+
+
 def test_with_estimated_grf_composes_pipeline_loads():
     dumbbell = mm.external.carried_load(
         mass_kg=5.0,

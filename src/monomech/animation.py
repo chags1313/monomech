@@ -45,6 +45,37 @@ class OpenSimVisualizerResult:
             'style="border:0;border-radius:8px;overflow:hidden;"></iframe>'
         )
 
+    def display(self, *, width: str = "100%", height: int = 860):
+        """Display this visualizer in a Jupyter notebook."""
+
+        return display_visualizer(self, width=width, height=height)
+
+    def show(self, *, width: str = "100%", height: int = 860):
+        """Alias for `display()` in notebooks."""
+
+        return self.display(width=width, height=height)
+
+
+def display_visualizer(target: Any, *, width: str = "100%", height: int = 860):
+    """Display a monomech visualizer from a path or pipeline result in Jupyter."""
+
+    html_path = None
+    if isinstance(target, OpenSimVisualizerResult):
+        html_path = target.html_path
+    elif hasattr(target, "visualizer") and target.visualizer is not None:
+        html_path = target.visualizer.html_path
+    else:
+        html_path = Path(target)
+
+    try:
+        from IPython.display import IFrame, display
+    except Exception as exc:
+        raise ImportError("Install `monomech[notebook]` to display visualizers in Jupyter.") from exc
+
+    frame = IFrame(Path(html_path).expanduser().resolve().as_uri(), width=width, height=height)
+    display(frame)
+    return frame
+
 
 def _require_animation_dependencies():
     missing = []
@@ -1756,7 +1787,6 @@ def _write_visualizer_html(
         <div class="legend">
           <span class="pill">teal: markers</span>
           <span class="pill">dark lines: marker skeleton</span>
-          <span class="pill">blue: model bone overlay</span>
           <span class="pill">orange: external forces</span>
         </div>
       </div>
@@ -1850,10 +1880,9 @@ def _write_visualizer_html(
 
     const markersGroup = new THREE.Group();
     const skeletonGroup = new THREE.Group();
-    const modelSkeletonGroup = new THREE.Group();
     const forceGroup = new THREE.Group();
     const modelGroup = new THREE.Group();
-    scene.add(modelGroup, modelSkeletonGroup, skeletonGroup, markersGroup, forceGroup);
+    scene.add(modelGroup, skeletonGroup, markersGroup, forceGroup);
 
     const markerMaterial = new THREE.MeshStandardMaterial({ color:0x0f766e, roughness:.55, metalness:0.0 });
     const markerGeom = new THREE.SphereGeometry(0.018, 16, 12);
@@ -1878,83 +1907,6 @@ def _write_visualizer_html(
       });
     }
     rebuildMarkerScene();
-    const modelSkeletonMaterial = new THREE.LineBasicMaterial({ color:0x2f6fed, linewidth:3 });
-    const modelSkeletonLines = [];
-
-    function cleanNodeName(name) {
-      return String(name || '').toLowerCase().replace(/^node_/, '').replace(/^mesh_/, '');
-    }
-    function findModelNode(...needles) {
-      const wanted = needles.map((item) => String(item).toLowerCase());
-      let best = null;
-      if (!glbRoot) return null;
-      glbRoot.traverse((node) => {
-        if (best || !node.name) return;
-        const clean = cleanNodeName(node.name);
-        if (wanted.every((needle) => clean.includes(needle))) best = node;
-      });
-      return best;
-    }
-    function firstModelNode(candidates) {
-      for (const candidate of candidates) {
-        const node = findModelNode(...candidate);
-        if (node) return node;
-      }
-      return null;
-    }
-    function rebuildModelSkeleton() {
-      modelSkeletonGroup.clear();
-      modelSkeletonLines.length = 0;
-      if (!glbRoot) return;
-      const nodes = {
-        pelvis: firstModelNode([['sacrum'], ['pelvis']]),
-        pelvisR: firstModelNode([['r_pelvis'], ['pelvis', 'r']]),
-        pelvisL: firstModelNode([['l_pelvis'], ['pelvis', 'l']]),
-        femurR: firstModelNode([['femur_r'], ['femur', 'r']]),
-        tibiaR: firstModelNode([['tibia_r'], ['tibia', 'r']]),
-        footR: firstModelNode([['talus_r'], ['calcn_r'], ['bofoot'], ['foot']]),
-        femurL: firstModelNode([['femur_l'], ['femur', 'l']]),
-        tibiaL: firstModelNode([['tibia_l'], ['tibia', 'l']]),
-        footL: firstModelNode([['talus_l'], ['calcn_l'], ['l_foot'], ['l_bofoot']]),
-        torso: firstModelNode([['hat_ribs'], ['thoracic1'], ['lumbar1']]),
-        skull: firstModelNode([['skull'], ['hat_skull']]),
-        humerusR: firstModelNode([['humerus_r'], ['humerus', 'r']]),
-        radiusR: firstModelNode([['radius_r'], ['ulna_r'], ['radius', 'r']]),
-        handR: firstModelNode([['metacarpal3_r'], ['capitate_r'], ['wrist', 'r']]),
-        humerusL: firstModelNode([['humerus_l'], ['humerus', 'l']]),
-        radiusL: firstModelNode([['radius_l'], ['ulna_l'], ['radius', 'l']]),
-        handL: firstModelNode([['metacarpal3_l'], ['capitate_l'], ['wrist', 'l']]),
-      };
-      const pairs = [
-        [nodes.pelvis, nodes.torso], [nodes.torso, nodes.skull],
-        [nodes.pelvisR || nodes.pelvis, nodes.femurR], [nodes.femurR, nodes.tibiaR], [nodes.tibiaR, nodes.footR],
-        [nodes.pelvisL || nodes.pelvis, nodes.femurL], [nodes.femurL, nodes.tibiaL], [nodes.tibiaL, nodes.footL],
-        [nodes.torso, nodes.humerusR], [nodes.humerusR, nodes.radiusR], [nodes.radiusR, nodes.handR],
-        [nodes.torso, nodes.humerusL], [nodes.humerusL, nodes.radiusL], [nodes.radiusL, nodes.handL],
-      ];
-      for (const [a, b] of pairs) {
-        if (!a || !b || a === b) continue;
-        const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-        const line = new THREE.Line(geom, modelSkeletonMaterial);
-        line.userData = { a, b };
-        modelSkeletonGroup.add(line);
-        modelSkeletonLines.push(line);
-      }
-    }
-    function updateModelSkeleton() {
-      const pa = new THREE.Vector3();
-      const pb = new THREE.Vector3();
-      for (const line of modelSkeletonLines) {
-        line.userData.a.getWorldPosition(pa);
-        line.userData.b.getWorldPosition(pb);
-        const pos = line.geometry.attributes.position;
-        pos.setXYZ(0, pa.x, pa.y, pa.z);
-        pos.setXYZ(1, pb.x, pb.y, pb.z);
-        pos.needsUpdate = true;
-        line.geometry.computeBoundingSphere();
-      }
-    }
-
     function validPoint(p) {
       return p && p.length === 3 && p.every(Number.isFinite);
     }
@@ -2013,7 +1965,7 @@ def _write_visualizer_html(
     function frameScene() {
       const box = new THREE.Box3();
       let hasBox = false;
-      for (const group of [modelGroup, modelSkeletonGroup, markersGroup, skeletonGroup]) {
+      for (const group of [modelGroup, markersGroup, skeletonGroup]) {
         const b = new THREE.Box3().setFromObject(group);
         if (Number.isFinite(b.min.x) && !b.isEmpty()) {
           if (!hasBox) box.copy(b); else box.union(b);
@@ -2066,9 +2018,7 @@ def _write_visualizer_html(
         glbDuration = gltf.animations[0]?.duration || 0;
         if (mixer) mixer.clipAction(gltf.animations[0]).play();
         syncTimeline();
-        rebuildModelSkeleton();
         modelGroup.visible = true;
-        modelSkeletonGroup.visible = true;
         document.getElementById('toggleModel').classList.add('active');
         frameScene();
         updateFrame(idx);
@@ -2089,7 +2039,6 @@ def _write_visualizer_html(
       }
       mixer.setTime(Math.max(0, Math.min(glbDuration, frac * glbDuration)));
       modelGroup.updateMatrixWorld(true);
-      updateModelSkeleton();
     }
     if (data.glb_path) loadGlb(data.glb_path);
     else status.textContent = 'Upload a GLB or use the marker view.';
@@ -2112,7 +2061,7 @@ def _write_visualizer_html(
         btn.classList.toggle('active', visible);
       });
     }
-    toggleButton('toggleModel', modelGroup, modelSkeletonGroup);
+    toggleButton('toggleModel', modelGroup);
     toggleButton('toggleMarkers', markersGroup);
     toggleButton('toggleForces', forceGroup);
 

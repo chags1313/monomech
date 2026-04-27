@@ -167,7 +167,19 @@ viewer = mm.save_opensim_visualizer(
 viewer
 ```
 
-In Jupyter, the returned object displays as an embedded iframe. In a script, open `viewer.html` in a browser.
+In Jupyter, display the visualizer with one call:
+
+```python
+mm.display_visualizer(viewer)
+```
+
+Pipeline results expose the same shortcut:
+
+```python
+result.display()
+```
+
+In a script, open `viewer.html` in a browser.
 
 The same visualizer works well on GitHub Pages because it does not need a Python server. The online page lets readers upload their own `.glb` export directly in the browser:
 

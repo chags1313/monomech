@@ -45,6 +45,18 @@ class VideoInverseDynamicsResult:
     external_forces: ExternalLoadsSpec | list[ExternalLoadsSpec] | None = None
     metadata: dict[str, Any] | None = None
 
+    def display(self, *, width: str = "100%", height: int = 860):
+        """Display the generated visualizer in a Jupyter notebook."""
+
+        from .animation import display_visualizer
+
+        return display_visualizer(self, width=width, height=height)
+
+    def show(self, *, width: str = "100%", height: int = 860):
+        """Alias for `display()` in notebooks."""
+
+        return self.display(width=width, height=height)
+
 
 def video_to_trc(
     video_path: str | Path,
@@ -135,7 +147,7 @@ def video_to_inverse_dynamics(
     sample_fps: float | None = None,
     stride: int = 1,
     external_forces: ExternalLoadsSpec
-    | list[ExternalLoadsSpec]
+    | list[ExternalLoadsSpec | Literal["estimate"]]
     | Literal["estimate"]
     | None = "estimate",
     body_mass_kg: float = 75.0,
@@ -172,12 +184,22 @@ def video_to_inverse_dynamics(
     )
     trial.last_trc_path = pose_run.trc_path
 
-    loads: ExternalLoadsSpec | list[ExternalLoadsSpec] | None
-    if external_forces == "estimate":
-        loads = external.estimate_grf(
+    estimated_loads: list[ExternalLoadsSpec] = []
+    if external_forces == "estimate" or (
+        isinstance(external_forces, list) and "estimate" in external_forces
+    ):
+        estimated_loads = external.estimate_grf(
             pose3d=trial.pose3d_global_result,
             body_mass_kg=body_mass_kg,
         )
+    loads: ExternalLoadsSpec | list[ExternalLoadsSpec] | None
+    if external_forces == "estimate":
+        loads = estimated_loads
+    elif isinstance(external_forces, list):
+        extra_loads = [load for load in external_forces if load != "estimate"]
+        loads = [*estimated_loads, *extra_loads]
+        if not loads:
+            loads = None
     else:
         loads = external_forces
 

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.15.9
+
+### Added
+- added `mm.external.with_estimated_grf(...)` to combine estimated ground-reaction forces with carried or measured loads in the video-to-ID pipeline
+- added `mm.display_visualizer(...)` plus `result.display()` / `viewer.display()` notebook shortcuts
+- allowed `external_forces=["estimate", load]` in `video_to_inverse_dynamics()`
+
+### Changed
+- removed the blue model bone overlay from generated and online visualizers
+- made `external.carried_load()` accept `applied_to_body=` and an application `point=`
+
 ## 0.15.8
 
 ### Added

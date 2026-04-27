@@ -173,8 +173,10 @@ class _ExternalFactory:
     def carried_load(
         self,
         *,
-        body: str,
         mass_kg: float,
+        body: str | None = None,
+        applied_to_body: str | None = None,
+        point: tuple[float, float, float] = (0.0, 0.0, 0.0),
         direction: str = "global_down",
         start_time: float = 0.0,
         end_time: float = 1.0,
@@ -183,17 +185,34 @@ class _ExternalFactory:
         g = 9.81
         if direction != "global_down":
             raise ValueError("Only direction='global_down' is supported in this scaffold.")
+        body_name = applied_to_body or body
+        if body_name is None:
+            raise ValueError("Provide `body=` or `applied_to_body=` for the carried load.")
 
         return self.constant_force(
-            applied_to_body=body,
+            applied_to_body=body_name,
             force=(0.0, -mass_kg * g, 0.0),
-            point=(0.0, 0.0, 0.0),
+            point=point,
             start_time=start_time,
             end_time=end_time,
             name=name,
             force_expressed_in="/ground",
-            point_expressed_in=body,
+            point_expressed_in=body_name,
         )
+
+    @staticmethod
+    def with_estimated_grf(
+        *loads: ExternalLoadsSpec | list[ExternalLoadsSpec] | tuple[ExternalLoadsSpec, ...],
+    ) -> list[ExternalLoadsSpec | str]:
+        """Return a pipeline load list that combines estimated GRF with extra loads."""
+
+        combined: list[ExternalLoadsSpec | str] = ["estimate"]
+        for load in loads:
+            if isinstance(load, (list, tuple)):
+                combined.extend(load)
+            else:
+                combined.append(load)
+        return combined
 
     def estimate_grf(
         self,

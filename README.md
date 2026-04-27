@@ -83,6 +83,7 @@ print(result.trc_path)
 print(result.ik.path)
 print(result.id.path)
 print(result.visualizer.html_path)
+result.display()
 ```
 
 If you already have marker data in a TRC file, start at OpenSim:
@@ -130,6 +131,25 @@ viewer
 ```
 
 The dashboard is a standalone HTML file, so it works in notebooks, local browsers, and GitHub Pages. When `glb_path` is provided, the GLB is embedded so the animated mesh loads immediately. The online visualizer starts empty and includes an **Upload GLB** control, which lets a reader drag in their own exported model without sending the file anywhere.
+
+For a carried object plus estimated ground-reaction forces:
+
+```python
+dumbbell = mm.external.carried_load(
+    mass_kg=12.5,
+    applied_to_body="radius_r",
+    point=(0.0, -0.2, 0.0),
+    name="right_dumbbell",
+)
+
+result = mm.video_to_inverse_dynamics(
+    "data/curl.mp4",
+    model_path=mm.get_builtin_osim_model("pose"),
+    output_dir="outputs/curl",
+    body_mass_kg=82.0,
+    external_forces=mm.external.with_estimated_grf(dumbbell),
+)
+```
 
 The GitHub Pages site includes an online GLB visualizer for quick review: [chags1313.github.io/monomech/visualizer/](https://chags1313.github.io/monomech/visualizer/).
 
@@ -206,8 +226,8 @@ Add `--opensim` when OpenSim-compatible bindings are installed.
 GitHub Actions builds distributions on every push to `main`. PyPI publishing goes directly to PyPI through trusted publishing and is triggered by version tags such as:
 
 ```bash
-git tag v0.15.8
-git push origin v0.15.8
+git tag v0.15.9
+git push origin v0.15.9
 ```
 
 The publish workflow can also be run manually from GitHub Actions with the `publish` input set to `true`.

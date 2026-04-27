@@ -10,6 +10,7 @@ def test_public_api():
     assert hasattr(mm, "load_trc")
     assert hasattr(mm, "external")
     assert hasattr(mm, "save_opensim_animation")
+    assert hasattr(mm, "display_visualizer")
     assert hasattr(mm, "save_ik_animation")
     assert hasattr(mm, "pose_to_trc")
     assert hasattr(mm, "markers_to_id")

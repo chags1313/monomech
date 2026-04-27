@@ -122,11 +122,31 @@ For the common carried-load case:
 
 ```python
 bag_load = mm.external.carried_load(
-    body="hand_r",
     mass_kg=5.0,
+    applied_to_body="radius_r",
+    point=(0.0, -0.2, 0.0),
     start_time=0.0,
     end_time=2.0,
     name="right_hand_bag",
+)
+```
+
+For a full video-to-ID run, combine estimated ground-reaction forces with the carried load in one argument:
+
+```python
+dumbbell = mm.external.carried_load(
+    mass_kg=12.5,
+    applied_to_body="radius_r",
+    point=(0.0, -0.2, 0.0),
+    name="right_dumbbell",
+)
+
+result = mm.video_to_inverse_dynamics(
+    "data/right_curl.mp4",
+    model_path=mm.get_builtin_osim_model("pose"),
+    output_dir="outputs/right_curl",
+    body_mass_kg=82.0,
+    external_forces=mm.external.with_estimated_grf(dumbbell),
 )
 ```
 

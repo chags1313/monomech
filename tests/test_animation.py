@@ -85,6 +85,8 @@ def test_opensim_visualizer_writes_dashboard_without_glb(tmp_path):
     assert "knee_angle_r_moment" in text
     assert "All signals" in text
     assert "external forces" in text
+    assert "model bone overlay" not in text
+    assert "modelSkeletonGroup" not in text
     assert result.metadata["force_count"] == 1
 
 

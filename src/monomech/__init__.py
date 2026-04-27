@@ -3,6 +3,7 @@
 from .animation import (
     OpenSimAnimationResult,
     OpenSimVisualizerResult,
+    display_visualizer,
     extract_opensim_marker_positions,
     save_animation_viewer,
     save_ik_animation,
@@ -74,6 +75,7 @@ __all__ = [
     "estimate_loads_from_pose",
     "OpenSimAnimationResult",
     "OpenSimVisualizerResult",
+    "display_visualizer",
     "extract_opensim_marker_positions",
     "save_opensim_animation",
     "save_opensim_visualizer",

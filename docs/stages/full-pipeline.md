@@ -84,9 +84,31 @@ print(result.trc_path)
 print(result.ik.path)
 print(result.id.path)
 print(result.visualizer.html_path)
+result.display()
 ```
 
 By default, `video_to_inverse_dynamics()` uses estimated bilateral ground-reaction forces from the pose result. Use measured force-plate data for quantitative kinetics, or pass `external_forces=None` to run ID without external loads as a setup check.
+
+To combine estimated ground-reaction forces with a carried object, include `"estimate"` alongside the extra load:
+
+```python
+dumbbell = mm.external.carried_load(
+    mass_kg=12.5,
+    applied_to_body="radius_r",
+    point=(0.0, -0.2, 0.0),
+    name="right_dumbbell",
+)
+
+result = mm.video_to_inverse_dynamics(
+    "data/curl.mp4",
+    model_path=mm.get_builtin_osim_model("pose"),
+    output_dir="outputs/curl",
+    body_mass_kg=82.0,
+    external_forces=mm.external.with_estimated_grf(dumbbell),
+)
+
+result.display()
+```
 
 ## What To Inspect At Each Stop
 

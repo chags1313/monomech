@@ -135,6 +135,10 @@ def _inject_glb_base64_autoload(html: str, b64: str) -> str:
     if not match:
         return html
     start_tag, module_code, end_tag = match.groups()
+    module_code = module_code.replace(
+        "if (data.glb_path) loadGlb(data.glb_path);",
+        "if (!window.MONOMECH_GLB_BASE64 && data.glb_path) loadGlb(data.glb_path);",
+    )
     inject_global = '<script>window.MONOMECH_GLB_BASE64="__GLB_B64__";</script>'
     autoload_js = r"""
 

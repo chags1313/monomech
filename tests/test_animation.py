@@ -222,7 +222,20 @@ def test_inline_notebook_visualizer_can_inject_glb_when_requested(tmp_path):
 
     assert "window.MONOMECH_GLB_BASE64" in html
     assert "loadGlb(url)" in html
+    assert "if (!window.MONOMECH_GLB_BASE64 && data.glb_path) loadGlb(data.glb_path);" in html
     assert "Z2xi" in html
+
+
+def test_inline_simple_glb_viewer_skips_path_autoload(tmp_path):
+    glb_path = tmp_path / "motion.glb"
+    glb_path.write_bytes(b"glb")
+    viewer = mm.create_glb_viewer(glb_path)
+
+    html = _inline_notebook_visualizer_html(viewer.html_path, viewer.metadata)
+
+    assert "window.MONOMECH_GLB_BASE64" in html
+    assert "if (!window.MONOMECH_GLB_BASE64 && data.glb_path) loadGlb(data.glb_path);" in html
+    assert "if (data.glb_path) loadGlb(data.glb_path);" not in html
 
 
 def test_notebook_file_url_falls_back_for_paths_outside_cwd(tmp_path):

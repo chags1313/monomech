@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.15.20
+
+### Fixed
+- made `viewer.show(inline_glb=True)` skip normal path-based GLB autoload so Colab does not get stuck trying to load an inaccessible local path before the injected GLB blob
+
 ## 0.15.19
 
 ### Added

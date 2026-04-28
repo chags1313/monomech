@@ -39,7 +39,7 @@
 <body>
   <header>
     <h1>monomech IK and ID visualizer</h1>
-    <div class="sub">Three.js model playback with marker fallback, external-force arrows, complete IK coordinate plots, and complete inverse-dynamics traces.</div>
+    <div class="sub">Fast OpenSim body playback, optional GLB mesh playback, external-force arrows, complete IK coordinate plots, and complete inverse-dynamics traces.</div>
   </header>
   <main>
     <section>
@@ -51,6 +51,7 @@
         <canvas id="threeScene"></canvas>
         <div class="legend">
           <span class="pill">teal: markers</span>
+          <span class="pill">gray: body proxies</span>
           <span class="pill">dark lines: marker skeleton</span>
           <span class="pill">orange: external forces</span>
         </div>
@@ -70,7 +71,7 @@
         <button id="toggleForces" class="active">Forces</button>
         <label>Upload GLB<input id="glbUpload" type="file" accept=".glb,model/gltf-binary"></label>
       </div>
-      <div class="notice" id="viewerNotice">Upload a monomech GLB or open an exported viewer to inspect synchronized model motion, markers, external forces, IK, and inverse dynamics.</div>
+      <div class="notice" id="viewerNotice">Inspect synchronized OpenSim body motion, markers, external forces, IK, and inverse dynamics. Upload a GLB when full anatomical surface meshes are needed.</div>
     </section>
     <div class="stack">
       <section>
@@ -87,9 +88,9 @@
       </section>
     </div>
   </main>
-  <script id="payload" type="application/json">{"title": "monomech IK and ID visualizer", "markers": {"names": [], "time": [], "frames": [], "segments": []}, "forces": null, "ik": {"path": null, "columns": [], "time": [], "series": {}}, "id": {"path": null, "columns": [], "time": [], "series": {}}, "glb_path": null, "force_scale": 0.35}</script>
+  <script id="payload" type="application/json">{"title": "monomech IK and ID visualizer", "markers": {"names": [], "time": [], "frames": [], "segments": []}, "bodies": {"names": [], "time": [], "frames": [], "segments": []}, "forces": null, "ik": {"path": null, "columns": [], "time": [], "series": {}}, "id": {"path": null, "columns": [], "time": [], "series": {}}, "glb_path": null, "force_scale": 0.35}</script>
   <script type="importmap">
-    {"imports":{"three":"https://unpkg.com/three@0.161.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.161.0/examples/jsm/"}}
+    {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"}}
   </script>
   <script type="module">
     import * as THREE from 'three';
@@ -97,9 +98,11 @@
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
     const emptyMarkers = () => ({names:[], time:[], frames:[], segments:[]});
+    const emptyBodies = () => ({names:[], time:[], frames:[], segments:[]});
     const emptyStore = () => ({path:null, columns:[], time:[], series:{}});
     let data = JSON.parse(document.getElementById('payload').textContent);
     let marker = data.markers || emptyMarkers();
+    let body = data.bodies || emptyBodies();
     let force = data.forces || {names:[], frames:[]};
     const scrub = document.getElementById('scrub');
     const timeLabel = document.getElementById('time');
@@ -117,6 +120,7 @@
     function refreshStats() {
       document.getElementById('stats').innerHTML = [
         ['Frames', marker.frames.length],
+        ['Bodies', body.names?.length || 0],
         ['Markers', marker.names.length],
         ['Forces', (force.names || []).length],
         ['IK traces', data.ik?.columns?.length || 0],
@@ -141,13 +145,50 @@
     const key = new THREE.DirectionalLight(0xffffff, 2.6);
     key.position.set(3, 5, 4);
     scene.add(key);
-scene.add(new THREE.GridHelper(16, 80, 0xb7c7c2, 0xdfe9e5));
+    scene.add(new THREE.GridHelper(16, 80, 0xb7c7c2, 0xdfe9e5));
 
     const markersGroup = new THREE.Group();
     const skeletonGroup = new THREE.Group();
     const forceGroup = new THREE.Group();
     const modelGroup = new THREE.Group();
+    const bodyProxyGroup = new THREE.Group();
+    modelGroup.add(bodyProxyGroup);
     scene.add(modelGroup, skeletonGroup, markersGroup, forceGroup);
+
+    const bodyMaterial = new THREE.MeshStandardMaterial({ color:0x6b7470, roughness:.68, metalness:0.0 });
+    const bodyJointMaterial = new THREE.MeshStandardMaterial({ color:0x39433f, roughness:.62, metalness:0.0 });
+    const bodyJointGeom = new THREE.SphereGeometry(0.026, 16, 12);
+    const bodyLineMaterial = new THREE.LineBasicMaterial({ color:0x56615d, linewidth:2 });
+    let bodyMeshes = [];
+    let bodyLines = [];
+    function bodyScale(name) {
+      const n = String(name || '').toLowerCase();
+      if (n.includes('pelvis') || n.includes('torso')) return [0.09, 0.055, 0.055];
+      if (n.includes('head')) return [0.075, 0.075, 0.075];
+      if (n.includes('femur') || n.includes('tibia') || n.includes('humerus')) return [0.065, 0.035, 0.035];
+      if (n.includes('foot') || n.includes('calcn')) return [0.075, 0.035, 0.045];
+      return [0.045, 0.032, 0.032];
+    }
+    function rebuildBodyScene() {
+      bodyProxyGroup.clear();
+      bodyMeshes = (body.names || []).map((name) => {
+        const mesh = new THREE.Mesh(bodyJointGeom, bodyMaterial);
+        const s = bodyScale(name);
+        mesh.scale.set(s[0] / 0.026, s[1] / 0.026, s[2] / 0.026);
+        mesh.name = name;
+        bodyProxyGroup.add(mesh);
+        return mesh;
+      });
+      bodyLines = (body.segments || []).map(([a,b]) => {
+        const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+        const line = new THREE.Line(geom, bodyLineMaterial);
+        line.userData = { a, b };
+        bodyProxyGroup.add(line);
+        return line;
+      });
+      if (bodyMeshes.length) status.textContent = 'Fast body viewer ready';
+    }
+    rebuildBodyScene();
 
     const markerMaterial = new THREE.MeshStandardMaterial({ color:0x0f766e, roughness:.55, metalness:0.0 });
     const markerGeom = new THREE.SphereGeometry(0.018, 16, 12);
@@ -199,6 +240,26 @@ scene.add(new THREE.GridHelper(16, 80, 0xb7c7c2, 0xdfe9e5));
         forceGroup.add(arrow);
       }
     }
+    function updateBodies(i) {
+      const frame = (body.frames || [])[i] || [];
+      bodyMeshes.forEach((mesh, bi) => {
+        const item = frame[bi];
+        const p = item?.p;
+        mesh.visible = validPoint(p);
+        if (mesh.visible) {
+          mesh.position.set(p[0], p[1], p[2]);
+          const q = item?.q;
+          if (q && q.length === 4 && q.every(Number.isFinite)) {
+            mesh.quaternion.set(q[0], q[1], q[2], q[3]);
+          }
+        }
+      });
+      bodyLines.forEach((line) => {
+        const a = frame[line.userData.a]?.p, b = frame[line.userData.b]?.p;
+        line.visible = validPoint(a) && validPoint(b);
+        if (line.visible) setLinePositions(line, a, b);
+      });
+    }
     function updateFrame(i) {
       const n = Math.max(1, timelineFrames);
       idx = ((Math.round(i) % n) + n) % n;
@@ -213,6 +274,7 @@ scene.add(new THREE.GridHelper(16, 80, 0xb7c7c2, 0xdfe9e5));
         line.visible = validPoint(a) && validPoint(b);
         if (line.visible) setLinePositions(line, a, b);
       });
+      updateBodies(idx);
       updateForces(idx);
       scrub.value = idx;
       setMixerToFrame(idx);
@@ -279,6 +341,7 @@ scene.add(new THREE.GridHelper(16, 80, 0xb7c7c2, 0xdfe9e5));
           }
         });
         modelGroup.add(glbRoot);
+        bodyProxyGroup.visible = false;
         mixer = gltf.animations.length ? new THREE.AnimationMixer(glbRoot) : null;
         glbDuration = gltf.animations[0]?.duration || 0;
         if (mixer) mixer.clipAction(gltf.animations[0]).play();
@@ -424,12 +487,14 @@ scene.add(new THREE.GridHelper(16, 80, 0xb7c7c2, 0xdfe9e5));
       data.title = embedded.title || data.title;
       data.force_scale = embedded.force_scale || data.force_scale || 0.35;
       Object.assign(marker, embedded.markers || emptyMarkers());
+      Object.assign(body, embedded.bodies || emptyBodies());
       Object.assign(force, embedded.forces || {names:[], frames:[]});
       Object.assign(data.ik, embedded.ik || emptyStore());
       Object.assign(data.id, embedded.id || emptyStore());
       if (force?.diagnostics?.warning) notice.textContent = force.diagnostics.warning;
       else notice.textContent = 'GLB metadata loaded. Model motion, forces, IK, and inverse dynamics are synchronized.';
       rebuildMarkerScene();
+      rebuildBodyScene();
       syncTimeline();
       refreshStats();
       ikPlot.refreshSelect();

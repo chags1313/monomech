@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.15.21
+
+### Added
+- added `mm.glb_viewer()` as a one-line production viewer helper; call it without a path for the same upload-first viewer used on the docs site, or pass a GLB path to preload a model
+- added marker-position DataFrame access on visualizer results through `viewer.to_dataframe()`
+
+### Changed
+- made `create_glb_viewer()` use the full production Three.js viewer shell instead of the older tiny viewer
+- made `animate()` reuse marker positions computed during GLB export, avoiding a duplicate OpenSim marker-extraction pass
+- switched viewer Three.js imports to jsDelivr for more reliable notebook loading
+
 ## 0.15.20
 
 ### Fixed

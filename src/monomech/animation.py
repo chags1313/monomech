@@ -38,6 +38,7 @@ class OpenSimVisualizerResult:
 
     html_path: Path
     metadata: dict[str, Any]
+    marker_dataframe: pd.DataFrame | None = None
 
     def _repr_html_(self) -> str:
         uri = _notebook_file_url(self.html_path)
@@ -55,6 +56,13 @@ class OpenSimVisualizerResult:
         """Alias for `display()` in notebooks."""
 
         return self.display(width=width, height=height, inline_glb=inline_glb)
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """Return model marker positions used by the visualizer, when available."""
+
+        if self.marker_dataframe is None:
+            return pd.DataFrame()
+        return self.marker_dataframe.copy()
 
 
 def display_visualizer(
@@ -1409,29 +1417,82 @@ def save_animation_viewer(
 
 
 def create_glb_viewer(
-    glb_path: str | Path,
+    glb_path: str | Path | None = None,
     html_path: str | Path | None = None,
     *,
-    title: str = "monomech OpenSim animation",
+    title: str = "monomech IK and ID visualizer",
     embed_glb: bool = False,
 ) -> OpenSimVisualizerResult:
-    """Create a tiny path-based GLB viewer that displays quickly in notebooks."""
+    """Create the production monomech GLB viewer.
 
-    glb = Path(glb_path).expanduser().resolve()
-    if not glb.is_file():
-        raise FileNotFoundError(f"GLB file not found: {glb}")
+    Pass a GLB path to preconfigure the viewer, or omit it to create the same
+    empty upload-first viewer used on the documentation site.
+    """
+
+    glb = None
+    if glb_path is not None:
+        glb = Path(glb_path).expanduser().resolve()
+        if not glb.is_file():
+            raise FileNotFoundError(f"GLB file not found: {glb}")
     if html_path is None:
-        html_path = glb.with_suffix(".viewer.html")
-    html = save_animation_viewer(html_path, glb, title=title, embed_glb=embed_glb)
+        if glb is None:
+            html_path = Path("outputs") / "visualizer" / "glb_viewer.html"
+        else:
+            html_path = glb.with_suffix(".viewer.html")
+    html_path = Path(html_path).expanduser().resolve()
+    glb_ref = None
+    if glb is not None:
+        glb_ref = _asset_reference(glb, html_path.parent, embed=embed_glb)
+    payload = _empty_visualizer_payload(title=title, glb_path=glb_ref)
+    _write_visualizer_html(html_path, title=title, payload=payload)
     return OpenSimVisualizerResult(
-        html_path=Path(html),
+        html_path=html_path,
         metadata={
-            "html_path": str(Path(html).expanduser().resolve()),
-            "glb_path": str(glb),
-            "embedded_glb": bool(embed_glb),
+            "html_path": str(html_path),
+            "glb_path": None if glb is None else str(glb),
+            "embedded_glb": bool(embed_glb and glb is not None),
             "viewer_kind": "glb",
         },
     )
+
+
+def glb_viewer(
+    glb_path: str | Path | None = None,
+    html_path: str | Path | None = None,
+    *,
+    title: str = "monomech IK and ID visualizer",
+    embed_glb: bool = False,
+) -> OpenSimVisualizerResult:
+    """One-line GLB viewer helper.
+
+    `mm.glb_viewer().show()` opens the upload-first viewer. Passing a GLB path
+    preloads that file when the browser can access it, or can be paired with
+    `.show(inline_glb=True)` in notebooks.
+    """
+
+    return create_glb_viewer(
+        glb_path=glb_path,
+        html_path=html_path,
+        title=title,
+        embed_glb=embed_glb,
+    )
+
+
+def _empty_visualizer_payload(
+    *,
+    title: str = "monomech IK and ID visualizer",
+    glb_path: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "title": title,
+        "markers": {"names": [], "time": [], "frames": [], "segments": []},
+        "bodies": {"names": [], "time": [], "frames": [], "segments": []},
+        "forces": None,
+        "ik": {"path": None, "columns": [], "time": [], "series": {}},
+        "id": {"path": None, "columns": [], "time": [], "series": {}},
+        "glb_path": glb_path,
+        "force_scale": 0.35,
+    }
 
 
 def _asset_reference(path: Path, relative_to: Path, *, embed: bool = False) -> str:
@@ -1491,7 +1552,7 @@ def _write_simple_glb_viewer_html(html_path: Path, *, title: str, payload: dict[
   <canvas id="viewer"></canvas>
   <script id="payload" type="application/json">__PAYLOAD__</script>
   <script type="importmap">
-    {"imports":{"three":"https://unpkg.com/three@0.161.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.161.0/examples/jsm/"}}
+    {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"}}
   </script>
   <script type="module">
     import * as THREE from 'three';
@@ -2244,7 +2305,7 @@ def _write_visualizer_html(
   </main>
   <script id="payload" type="application/json">__PAYLOAD__</script>
   <script type="importmap">
-    {"imports":{"three":"https://unpkg.com/three@0.161.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.161.0/examples/jsm/"}}
+    {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"}}
   </script>
   <script type="module">
     import * as THREE from 'three';
@@ -2747,20 +2808,20 @@ def save_opensim_visualizer(
             glb_source = str(glb)
             glb_ref = _asset_reference(glb, html_path.parent, embed=embed_glb)
 
-    payload = {
-        "title": title,
-        "markers": markers,
-        "bodies": _body_transform_payload(
-            osim_path=osim_path,
-            ik_path=ik_path,
-            target_time=markers["time"],
-        ),
-        "forces": forces,
-        "ik": _storage_for_visualizer(ik_path),
-        "id": _storage_for_visualizer(id_path),
-        "glb_path": glb_ref,
-        "force_scale": 0.35,
-    }
+    payload = _empty_visualizer_payload(title=title, glb_path=glb_ref)
+    payload.update(
+        {
+            "markers": markers,
+            "bodies": _body_transform_payload(
+                osim_path=osim_path,
+                ik_path=ik_path,
+                target_time=markers["time"],
+            ),
+            "forces": forces,
+            "ik": _storage_for_visualizer(ik_path),
+            "id": _storage_for_visualizer(id_path),
+        }
+    )
     _write_visualizer_html(html_path, title=title, payload=payload)
     metadata = {
         "html_path": str(html_path),
@@ -2775,7 +2836,11 @@ def save_opensim_visualizer(
         if external_loads_path is None
         else str(Path(external_loads_path).expanduser().resolve()),
     }
-    return OpenSimVisualizerResult(html_path=html_path, metadata=metadata)
+    return OpenSimVisualizerResult(
+        html_path=html_path,
+        metadata=metadata,
+        marker_dataframe=marker_dataframe,
+    )
 
 
 def save_opensim_fast_visualizer(

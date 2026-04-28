@@ -238,6 +238,16 @@ def test_inline_simple_glb_viewer_skips_path_autoload(tmp_path):
     assert "if (data.glb_path) loadGlb(data.glb_path);" not in html
 
 
+def test_glb_viewer_can_create_upload_first_base_viewer(tmp_path):
+    viewer = mm.glb_viewer(html_path=tmp_path / "base.html")
+
+    text = viewer.html_path.read_text(encoding="utf-8")
+    assert viewer.metadata["glb_path"] is None
+    assert '"glb_path": null' in text
+    assert "Upload GLB" in text
+    assert "3D Model, Markers, And Forces" in text
+
+
 def test_notebook_file_url_falls_back_for_paths_outside_cwd(tmp_path):
     outside = tmp_path / "viewer.html"
     outside.write_text("viewer", encoding="utf-8")
@@ -257,6 +267,10 @@ def test_animate_exposes_speed_and_reference_options(monkeypatch, tmp_path):
 
         class Result:
             glb_path = kwargs["out_glb_path"]
+            marker_dataframe = pd.DataFrame(
+                {"hip_r_x": [0.0], "hip_r_y": [0.0], "hip_r_z": [0.0]},
+                index=pd.Index([0.0], name="time"),
+            )
 
         Result.glb_path.write_bytes(b"glb")
         return Result()
@@ -286,6 +300,7 @@ def test_animate_exposes_speed_and_reference_options(monkeypatch, tmp_path):
     assert captured["animation"]["decimate_target_reduction"] == 0.25
     assert captured["visualizer"]["embed_glb"] is False
     assert captured["visualizer"]["max_frames"] == 160
+    assert captured["visualizer"]["marker_dataframe"] is not None
 
 
 def test_animate_fast_render_skips_glb_export(monkeypatch, tmp_path):

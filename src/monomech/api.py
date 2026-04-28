@@ -403,6 +403,7 @@ def animate(
     viewer_max_frames = int(preset["max_frames"])
 
     glb_path = None
+    marker_dataframe = None
     if create_glb:
         animation = save_opensim_animation(
             osim_path=model_path,
@@ -420,6 +421,7 @@ def animate(
             drop_origin_nodes=drop_origin_nodes,
         )
         glb_path = animation.glb_path
+        marker_dataframe = animation.marker_dataframe
 
     return save_opensim_visualizer(
         out / f"{stem}.html",
@@ -428,6 +430,7 @@ def animate(
         id_path=id_path,
         external_loads_path=external_loads_path,
         glb_path=glb_path,
+        marker_dataframe=marker_dataframe,
         max_frames=viewer_max_frames,
         marker_stride=viewer_marker_stride,
         embed_glb=embed_glb,

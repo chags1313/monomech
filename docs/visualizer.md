@@ -4,6 +4,25 @@ Use the browser visualizer to inspect a monomech `.glb` animation without instal
 
 [Open the GLB visualizer](assets/visualizer.html){ .md-button .md-button--primary }
 
+The same viewer is available from Python:
+
+```python
+mm.glb_viewer().show()
+```
+
+To open a specific GLB from a notebook:
+
+```python
+viewer = mm.glb_viewer("outputs/subject01/visualizer/walk.glb")
+viewer.show()
+```
+
+If the notebook browser cannot access that file path, use inline mode:
+
+```python
+viewer.show(inline_glb=True)
+```
+
 ## What It Shows
 
 - animated OpenSim mesh playback from a monomech-exported GLB
@@ -20,4 +39,11 @@ viewer = mm.animate(
     external_loads_path=id_result.metadata["external_loads_mot_path"],
 )
 viewer.show()
+```
+
+`animate()` focuses on creating the animation and exported dashboard. The returned viewer also keeps the model marker positions used for the display:
+
+```python
+model_markers = viewer.to_dataframe()
+display(model_markers.head())
 ```

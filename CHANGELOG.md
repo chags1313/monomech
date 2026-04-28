@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.15.18
+
+### Fixed
+- made the fast no-GLB visualizer auto-stride OpenSim marker extraction before evaluation instead of extracting every IK frame and only downsampling afterward
+
 ## 0.15.17
 
 ### Added

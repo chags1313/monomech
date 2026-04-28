@@ -358,6 +358,7 @@ def animate(
         raise ValueError("render must be either 'fast' or 'glb'.")
     if render == "fast":
         create_glb = False
+        max_frames = min(int(max_frames), 120)
 
     ik_path = ik.path if isinstance(ik, StorageResult) else Path(ik).expanduser().resolve()
     id_path = (

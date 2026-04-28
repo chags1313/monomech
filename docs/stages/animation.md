@@ -149,6 +149,22 @@ viewer.show()
 
 The fast viewer is the best default for checking motion, carried-load placement, ground-reaction arrows, IK coordinates, and inverse-dynamics traces during analysis. It controls body proxy meshes correctly, but it does not render the full anatomical surface meshes.
 
+For very long trials, keep the browser payload small:
+
+```python
+viewer = mm.animate(
+    ik=ik,
+    id=id_result,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    render="fast",
+    max_frames=80,
+    marker_stride=5,
+)
+viewer.show()
+```
+
+`max_frames` caps the number of frames displayed, and `marker_stride` can be raised when you want even faster OpenSim marker extraction.
+
 Use the GLB path when you need the full model geometry:
 
 ```python

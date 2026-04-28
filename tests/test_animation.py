@@ -5,6 +5,7 @@ import pandas as pd
 
 import monomech as mm
 from monomech.animation import (
+    _auto_visualizer_stride,
     _dedupe_geometry_specs,
     _external_load_payload,
     _geometry_file_aliases,
@@ -137,6 +138,17 @@ def test_external_load_payload_preserves_body_local_load_metadata(tmp_path):
     assert frame_load["force_expressed_in"] == "/ground"
     assert frame_load["raw_point"] == [0.0, 0.0, 0.0]
     assert "body-local" in payload["diagnostics"]["warning"]
+
+
+def test_visualizer_stride_auto_caps_opensim_extraction(tmp_path):
+    ik_path = tmp_path / "long_ik.mot"
+    rows = ["endheader", "time pelvis_tx"]
+    rows.extend(f"{i / 100:.2f} {i * 0.001:.4f}" for i in range(1000))
+    ik_path.write_text("\n".join(rows), encoding="utf-8")
+
+    stride = _auto_visualizer_stride(ik_path, max_frames=100, requested_stride=1)
+
+    assert stride == 10
 
 
 def test_opensim_visualizer_references_glb_by_default(tmp_path):
@@ -279,6 +291,7 @@ def test_animate_fast_render_skips_glb_export(monkeypatch, tmp_path):
     assert result.html_path.name == "trial.html"
     assert captured["animation_called"] is False
     assert captured["visualizer"]["glb_path"] is None
+    assert captured["visualizer"]["max_frames"] == 120
 
 
 def test_visualizer_keeps_all_storage_signals(tmp_path):

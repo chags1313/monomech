@@ -1726,6 +1726,28 @@ def _infer_marker_segments(marker_names: list[str]) -> list[list[int]]:
     return out
 
 
+def _auto_visualizer_stride(
+    storage_path: str | Path | None,
+    *,
+    max_frames: int,
+    requested_stride: int,
+) -> int:
+    requested_stride = max(1, int(requested_stride))
+    max_frames = max(1, int(max_frames))
+    if storage_path is None:
+        return requested_stride
+    try:
+        from .io.storage import read_storage
+
+        df = read_storage(Path(storage_path).expanduser().resolve())
+        frame_count = len(df)
+    except Exception:
+        return requested_stride
+    if frame_count <= 0:
+        return requested_stride
+    return max(requested_stride, int(math.ceil(frame_count / max_frames)))
+
+
 def _body_transform_payload(
     *,
     osim_path: str | Path | None,
@@ -2669,6 +2691,11 @@ def save_opensim_visualizer(
     if marker_dataframe is None:
         if osim_path is None or ik_path is None:
             raise ValueError("Provide marker_dataframe or both osim_path and ik_path.")
+        marker_stride = _auto_visualizer_stride(
+            ik_path,
+            max_frames=max_frames,
+            requested_stride=marker_stride,
+        )
         marker_dataframe = extract_opensim_marker_positions(
             osim_path=osim_path,
             mot_path=ik_path,

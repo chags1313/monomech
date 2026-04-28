@@ -167,6 +167,24 @@ viewer.show()
 
 `max_frames` caps the number of frames displayed, and `marker_stride` can be raised when you want even faster OpenSim marker extraction.
 
+For the fastest body-and-force preview, skip marker extraction and keep only major bodies:
+
+```python
+viewer = mm.animate(
+    ik=ik,
+    id=id_result,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    render="fast",
+    max_frames=40,
+    include_markers=False,
+    bodies="major",
+    cache=True,
+)
+viewer.show()
+```
+
+`cache=True` stores the sampled OpenSim viewer data next to the HTML file. Re-running the same viewer with the same model, IK, ID, external loads, and speed settings reuses that cache instead of recomputing OpenSim body transforms.
+
 Use the GLB path when you need the full model geometry:
 
 ```python

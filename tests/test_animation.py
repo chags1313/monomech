@@ -369,6 +369,87 @@ def test_animate_fast_render_skips_glb_export(monkeypatch, tmp_path):
     assert captured["visualizer"]["max_frames"] == 120
 
 
+def test_fast_visualizer_speed_knobs_are_forwarded(monkeypatch, tmp_path):
+    ik_path = tmp_path / "trial_ik.mot"
+    ik_path.write_text("endheader\ntime pelvis_tx\n0.0 0.0\n", encoding="utf-8")
+    model_path = tmp_path / "model.osim"
+    model_path.write_text("<OpenSimDocument />", encoding="utf-8")
+    captured = {}
+
+    def fake_visualizer(html_path, **kwargs):
+        captured.update(kwargs)
+        html_path = Path(html_path)
+        html_path.write_text("viewer", encoding="utf-8")
+        return mm.OpenSimVisualizerResult(html_path=html_path, metadata=kwargs)
+
+    monkeypatch.setattr("monomech.api.save_opensim_visualizer", fake_visualizer)
+
+    mm.animate(
+        ik=ik_path,
+        model=model_path,
+        output_dir=tmp_path / "viz",
+        render="fast",
+        max_frames=40,
+        marker_stride=8,
+        include_markers=False,
+        bodies="major",
+        cache=True,
+        cache_path=tmp_path / "viewer-cache.json",
+    )
+
+    assert captured["max_frames"] == 40
+    assert captured["marker_stride"] == 8
+    assert captured["include_markers"] is False
+    assert captured["bodies"] == "major"
+    assert captured["cache"] is True
+    assert captured["cache_path"] == tmp_path / "viewer-cache.json"
+
+
+def test_visualizer_cache_reuses_payload(monkeypatch, tmp_path):
+    ik_path = tmp_path / "trial_ik.mot"
+    ik_path.write_text("endheader\ntime pelvis_tx\n0.0 0.0\n1.0 1.0\n", encoding="utf-8")
+    model_path = tmp_path / "model.osim"
+    model_path.write_text("<OpenSimDocument />", encoding="utf-8")
+    cache_path = tmp_path / "viewer.cache.json"
+    marker_df = pd.DataFrame(
+        {"hip_r_x": [0.0, 1.0], "hip_r_y": [0.0, 0.0], "hip_r_z": [0.0, 0.0]},
+        index=pd.Index([0.0, 1.0], name="time"),
+    )
+    calls = {"body": 0, "force": 0}
+
+    def fake_body(**kwargs):
+        calls["body"] += 1
+        return {"names": ["pelvis"], "time": kwargs["target_time"], "frames": [], "segments": []}
+
+    def fake_force(*args, **kwargs):
+        calls["force"] += 1
+        return {"names": [], "frames": []}
+
+    monkeypatch.setattr("monomech.animation._body_transform_payload", fake_body)
+    monkeypatch.setattr("monomech.animation._external_load_payload", fake_force)
+
+    first = mm.save_opensim_visualizer(
+        tmp_path / "viewer.html",
+        osim_path=model_path,
+        ik_path=ik_path,
+        marker_dataframe=marker_df,
+        cache=True,
+        cache_path=cache_path,
+    )
+    second = mm.save_opensim_visualizer(
+        tmp_path / "viewer.html",
+        osim_path=model_path,
+        ik_path=ik_path,
+        marker_dataframe=marker_df,
+        cache=True,
+        cache_path=cache_path,
+    )
+
+    assert first.metadata["cache_hit"] is False
+    assert second.metadata["cache_hit"] is True
+    assert calls == {"body": 1, "force": 1}
+
+
 def test_visualizer_keeps_all_storage_signals(tmp_path):
     times = np.array([0.0, 0.5, 1.0])
     markers = pd.DataFrame(

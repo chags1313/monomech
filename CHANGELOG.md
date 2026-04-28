@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.15.24
+
+### Added
+- added fast visualizer speed knobs: `include_markers`, `bodies`, `cache`, and `cache_path` for `mm.animate()`, `mm.fast_viewer()`, `save_opensim_visualizer()`, and `save_opensim_fast_visualizer()`
+- added visualizer payload caching so repeated fast viewer calls with the same model/IK/ID/load/settings can skip OpenSim transform recomputation
+
 ## 0.15.23
 
 ### Added

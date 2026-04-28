@@ -356,6 +356,10 @@ def animate(
     max_frames: int = 240,
     marker_stride: int = 1,
     embed_glb: bool = False,
+    include_markers: bool = True,
+    bodies: Literal["all", "major"] | list[str] | tuple[str, ...] | None = "all",
+    cache: bool = True,
+    cache_path: str | Path | None = None,
 ) -> OpenSimVisualizerResult:
     """Create a notebook-ready OpenSim animation visualizer."""
 
@@ -439,6 +443,10 @@ def animate(
         max_frames=viewer_max_frames,
         marker_stride=viewer_marker_stride,
         embed_glb=embed_glb,
+        include_markers=include_markers,
+        bodies=bodies,
+        cache=cache,
+        cache_path=cache_path,
     )
 
 
@@ -452,6 +460,10 @@ def fast_viewer(
     external_loads_path: str | Path | None = None,
     max_frames: int = 240,
     marker_stride: int = 1,
+    include_markers: bool = True,
+    bodies: Literal["all", "major"] | list[str] | tuple[str, ...] | None = "all",
+    cache: bool = True,
+    cache_path: str | Path | None = None,
 ) -> OpenSimVisualizerResult:
     """Create the fast no-GLB OpenSim viewer."""
 
@@ -465,6 +477,10 @@ def fast_viewer(
         render="fast",
         max_frames=max_frames,
         marker_stride=marker_stride,
+        include_markers=include_markers,
+        bodies=bodies,
+        cache=cache,
+        cache_path=cache_path,
     )
 
 

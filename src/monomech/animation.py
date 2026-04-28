@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import json
 import math
@@ -1884,6 +1885,7 @@ def _body_transform_payload(
     osim_path: str | Path | None,
     ik_path: str | Path | None,
     target_time: list[float],
+    bodies: str | list[str] | tuple[str, ...] | None = "all",
 ) -> dict[str, Any] | None:
     if osim_path is None or ik_path is None or not target_time:
         return None
@@ -1894,7 +1896,8 @@ def _body_transform_payload(
         in_degrees, ik_times, labels, ik_data = _read_mot_or_sto(Path(ik_path).expanduser().resolve(), osim)
         mapping, _ = _coordinate_mapping(model, labels, in_degrees=in_degrees)
         body_set = model.getBodySet()
-        body_names = [body_set.get(i).getName() for i in range(body_set.getSize())]
+        all_body_names = [body_set.get(i).getName() for i in range(body_set.getSize())]
+        body_names = _select_body_names(all_body_names, bodies)
     except Exception as exc:
         return {"names": [], "time": [], "frames": [], "segments": [], "warning": str(exc)}
 
@@ -1994,6 +1997,129 @@ def _infer_body_segments(body_names: list[str]) -> list[list[int]]:
             out.append([a, b])
             seen.add(key)
     return out
+
+
+def _select_body_names(
+    all_body_names: list[str],
+    bodies: str | list[str] | tuple[str, ...] | None,
+) -> list[str]:
+    if bodies is None or bodies == "all":
+        return all_body_names
+    if bodies == "major":
+        preferred = [
+            "pelvis",
+            "torso",
+            "head",
+            "femur_r",
+            "tibia_r",
+            "talus_r",
+            "calcn_r",
+            "toes_r",
+            "femur_l",
+            "tibia_l",
+            "talus_l",
+            "calcn_l",
+            "toes_l",
+            "humerus_r",
+            "ulna_r",
+            "radius_r",
+            "hand_r",
+            "humerus_l",
+            "ulna_l",
+            "radius_l",
+            "hand_l",
+        ]
+        available = set(all_body_names)
+        selected = [name for name in preferred if name in available]
+        return selected or all_body_names
+    if isinstance(bodies, str):
+        raise ValueError("bodies must be 'all', 'major', None, or a list of body names.")
+    available = set(all_body_names)
+    selected = [str(name) for name in bodies if str(name) in available]
+    missing = sorted({str(name) for name in bodies if str(name) not in available})
+    if missing:
+        sample = ", ".join(all_body_names[:12])
+        raise ValueError(f"Unknown body names for visualizer: {missing}. Examples: {sample}")
+    return selected
+
+
+def _file_fingerprint(path: str | Path | None) -> dict[str, Any] | None:
+    if path is None:
+        return None
+    resolved = Path(path).expanduser().resolve()
+    if not resolved.is_file():
+        return {"path": str(resolved), "exists": False}
+    stat = resolved.stat()
+    return {
+        "path": str(resolved),
+        "size": int(stat.st_size),
+        "mtime_ns": int(stat.st_mtime_ns),
+    }
+
+
+def _visualizer_cache_key(
+    *,
+    osim_path: str | Path | None,
+    ik_path: str | Path | None,
+    id_path: str | Path | None,
+    external_loads_path: str | Path | None,
+    max_frames: int,
+    marker_stride: int,
+    include_markers: bool,
+    bodies: str | list[str] | tuple[str, ...] | None,
+) -> str:
+    payload = {
+        "version": 2,
+        "osim": _file_fingerprint(osim_path),
+        "ik": _file_fingerprint(ik_path),
+        "id": _file_fingerprint(id_path),
+        "external_loads": _file_fingerprint(external_loads_path),
+        "max_frames": int(max_frames),
+        "marker_stride": int(marker_stride),
+        "include_markers": bool(include_markers),
+        "bodies": list(bodies) if isinstance(bodies, (list, tuple)) else bodies,
+    }
+    raw = json.dumps(_json_safe(payload), sort_keys=True, allow_nan=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _read_visualizer_cache(path: Path, cache_key: str) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if payload.get("cache_key") != cache_key:
+        return None
+    data = payload.get("data")
+    return data if isinstance(data, dict) else None
+
+
+def _write_visualizer_cache(path: Path, cache_key: str, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"cache_key": cache_key, "data": _json_safe(data)}
+    path.write_text(json.dumps(payload, allow_nan=False), encoding="utf-8", newline="\n")
+
+
+def _sample_storage_times(path: str | Path | None, max_frames: int) -> list[float]:
+    if path is None:
+        return []
+    try:
+        from .io.storage import read_storage
+
+        df = read_storage(Path(path).expanduser().resolve())
+    except Exception:
+        return []
+    if df.empty:
+        return []
+    time_col = "time" if "time" in df.columns else df.columns[0]
+    time = pd.to_numeric(df[time_col], errors="coerce").to_numpy(dtype=float)
+    time = time[np.isfinite(time)]
+    if len(time) == 0:
+        return []
+    sample = np.linspace(0, len(time) - 1, min(max(1, int(max_frames)), len(time)), dtype=int)
+    return np.round(time[np.unique(sample)], 5).astype(float).tolist()
 
 
 def _external_load_payload(
@@ -2815,30 +2941,91 @@ def save_opensim_visualizer(
     max_frames: int = 240,
     marker_stride: int = 1,
     embed_glb: bool = False,
+    include_markers: bool = True,
+    bodies: str | list[str] | tuple[str, ...] | None = "all",
+    cache: bool = True,
+    cache_path: str | Path | None = None,
 ) -> OpenSimVisualizerResult:
     """Write a notebook-ready HTML dashboard for IK, ID, forces, and 3D motion."""
 
     html_path = Path(html_path).expanduser().resolve()
-    if marker_dataframe is None:
-        if osim_path is None or ik_path is None:
-            raise ValueError("Provide marker_dataframe or both osim_path and ik_path.")
-        marker_stride = _auto_visualizer_stride(
-            ik_path,
-            max_frames=max_frames,
-            requested_stride=marker_stride,
+    cache_file = None
+    cache_payload = None
+    cache_key = None
+    if cache:
+        cache_file = (
+            Path(cache_path).expanduser().resolve()
+            if cache_path is not None
+            else html_path.with_suffix(".cache.json")
         )
-        marker_dataframe = extract_opensim_marker_positions(
+        cache_key = _visualizer_cache_key(
             osim_path=osim_path,
-            mot_path=ik_path,
-            stride=marker_stride,
+            ik_path=ik_path,
+            id_path=id_path,
+            external_loads_path=external_loads_path,
+            max_frames=max_frames,
+            marker_stride=marker_stride,
+            include_markers=include_markers,
+            bodies=bodies,
         )
-    markers = _marker_payload(marker_dataframe, max_frames=max_frames)
-    forces = _external_load_payload(
-        external_loads_path,
-        target_time=markers["time"],
-        osim_path=osim_path,
-        ik_path=ik_path,
-    )
+        cache_payload = _read_visualizer_cache(cache_file, cache_key)
+
+    if cache_payload is not None:
+        markers = cache_payload.get("markers") or _empty_visualizer_payload()["markers"]
+        forces = cache_payload.get("forces")
+        body_payload = cache_payload.get("bodies")
+    elif not include_markers:
+        marker_dataframe = None
+        markers = {"names": [], "time": _sample_storage_times(ik_path, max_frames), "frames": [], "segments": []}
+        forces = _external_load_payload(
+            external_loads_path,
+            target_time=markers["time"],
+            osim_path=osim_path,
+            ik_path=ik_path,
+        )
+        body_payload = _body_transform_payload(
+            osim_path=osim_path,
+            ik_path=ik_path,
+            target_time=markers["time"],
+            bodies=bodies,
+        )
+    else:
+        if marker_dataframe is None:
+            if osim_path is None or ik_path is None:
+                raise ValueError("Provide marker_dataframe or both osim_path and ik_path.")
+            marker_stride = _auto_visualizer_stride(
+                ik_path,
+                max_frames=max_frames,
+                requested_stride=marker_stride,
+            )
+            marker_dataframe = extract_opensim_marker_positions(
+                osim_path=osim_path,
+                mot_path=ik_path,
+                stride=marker_stride,
+            )
+        markers = _marker_payload(marker_dataframe, max_frames=max_frames)
+        forces = _external_load_payload(
+            external_loads_path,
+            target_time=markers["time"],
+            osim_path=osim_path,
+            ik_path=ik_path,
+        )
+        body_payload = _body_transform_payload(
+            osim_path=osim_path,
+            ik_path=ik_path,
+            target_time=markers["time"],
+            bodies=bodies,
+        )
+        if cache_file is not None and cache_key is not None:
+            _write_visualizer_cache(
+                cache_file,
+                cache_key,
+                {
+                    "markers": markers,
+                    "bodies": body_payload,
+                    "forces": forces,
+                },
+            )
 
     glb_ref = None
     glb_source = None
@@ -2852,11 +3039,7 @@ def save_opensim_visualizer(
     payload.update(
         {
             "markers": markers,
-            "bodies": _body_transform_payload(
-                osim_path=osim_path,
-                ik_path=ik_path,
-                target_time=markers["time"],
-            ),
+            "bodies": body_payload,
             "forces": forces,
             "ik": _storage_for_visualizer(ik_path),
             "id": _storage_for_visualizer(id_path),
@@ -2875,6 +3058,10 @@ def save_opensim_visualizer(
         "external_loads_path": None
         if external_loads_path is None
         else str(Path(external_loads_path).expanduser().resolve()),
+        "include_markers": bool(include_markers),
+        "bodies": bodies,
+        "cache_path": None if cache_file is None else str(cache_file),
+        "cache_hit": cache_payload is not None,
     }
     return OpenSimVisualizerResult(
         html_path=html_path,
@@ -2894,6 +3081,10 @@ def save_opensim_fast_visualizer(
     title: str = "monomech fast IK and ID visualizer",
     max_frames: int = 240,
     marker_stride: int = 1,
+    include_markers: bool = True,
+    bodies: str | list[str] | tuple[str, ...] | None = "all",
+    cache: bool = True,
+    cache_path: str | Path | None = None,
 ) -> OpenSimVisualizerResult:
     """Write the fast OpenSim HTML viewer without exporting or loading a GLB.
 
@@ -2914,6 +3105,10 @@ def save_opensim_fast_visualizer(
         max_frames=max_frames,
         marker_stride=marker_stride,
         embed_glb=False,
+        include_markers=include_markers,
+        bodies=bodies,
+        cache=cache,
+        cache_path=cache_path,
     )
 
 

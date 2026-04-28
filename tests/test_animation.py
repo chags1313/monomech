@@ -248,6 +248,39 @@ def test_glb_viewer_can_create_upload_first_base_viewer(tmp_path):
     assert "3D Model, Markers, And Forces" in text
 
 
+def test_colab_display_uses_inline_html(monkeypatch, tmp_path):
+    viewer = mm.glb_viewer(html_path=tmp_path / "base.html")
+    captured = {}
+
+    class FakeHTML:
+        def __init__(self, html):
+            self.html = html
+
+    class FakeIFrame:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("Colab display should not use file iframe")
+
+    def fake_display(frame):
+        captured["frame"] = frame
+
+    monkeypatch.setattr("monomech.animation._running_in_colab", lambda: True)
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "IPython.display",
+        type(
+            "FakeDisplayModule",
+            (),
+            {"HTML": FakeHTML, "IFrame": FakeIFrame, "display": staticmethod(fake_display)},
+        ),
+    )
+
+    frame = viewer.show()
+
+    assert frame is captured["frame"]
+    assert "Upload GLB" in frame.html
+    assert "localhost" not in frame.html
+
+
 def test_notebook_file_url_falls_back_for_paths_outside_cwd(tmp_path):
     outside = tmp_path / "viewer.html"
     outside.write_text("viewer", encoding="utf-8")

@@ -90,7 +90,7 @@ def display_visualizer(
     except Exception as exc:
         raise ImportError("Install `monomech[notebook]` to display visualizers in Jupyter.") from exc
 
-    if inline_glb:
+    if inline_glb or _running_in_colab():
         html = _inline_notebook_visualizer_html(html_path, metadata, width=width, height=height)
         frame = HTML(html)
         display(frame)
@@ -99,6 +99,14 @@ def display_visualizer(
     frame = IFrame(_notebook_file_url(html_path), width=width, height=height)
     display(frame)
     return frame
+
+
+def _running_in_colab() -> bool:
+    try:
+        import google.colab  # type: ignore  # noqa: F401
+    except Exception:
+        return False
+    return True
 
 
 def _notebook_file_url(path: str | Path) -> str:

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.15.22
+
+### Fixed
+- made notebook visualizer display Colab-aware so `.show()` renders inline HTML instead of using the Jupyter `/files/` iframe route that appears as `localhost refused to connect` in Colab
+
 ## 0.15.21
 
 ### Added

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "monomech"
-version = "0.15.22"
+version = "0.15.23"
 description = "Single camera biomechanics library"
 readme = "README.md"
 license = "MIT"

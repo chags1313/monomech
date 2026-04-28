@@ -89,6 +89,14 @@ print(ik.metadata["marker_error_summary"])
 ik.plot()
 ```
 
+For faster iteration, use the direct OpenSim solver backend:
+
+```python
+ik = mm.run_ik(scale, backend="fast")
+```
+
+`backend="base"` is the default OpenSim tool workflow. `backend="fast"` keeps the model and IK solver alive across frames and warm-starts from the previous frame, which can be much faster for video trials while preserving the same marker data, model, and accuracy setting.
+
 Add marker weights when some markers should matter more:
 
 ```python

@@ -168,13 +168,20 @@ def _prepare_trc_for_opensim(
     return clean_path, report
 
 
-def _write_storage_from_dataframe(path: Path, df: pd.DataFrame, *, name: str) -> Path:
+def _write_storage_from_dataframe(
+    path: Path,
+    df: pd.DataFrame,
+    *,
+    name: str,
+    in_degrees: bool = False,
+) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     header = [
         f"name {name}",
         f"datacolumns {len(df.columns)}",
         f"datarows {len(df)}",
         f"range {float(df.iloc[0, 0]):.6f} {float(df.iloc[-1, 0]):.6f}",
+        f"inDegrees={'yes' if in_degrees else 'no'}",
         "endheader",
     ]
     with path.open("w", encoding="utf-8", newline="\n") as f:
@@ -183,6 +190,85 @@ def _write_storage_from_dataframe(path: Path, df: pd.DataFrame, *, name: str) ->
         f.write("\t".join(df.columns) + "\n")
         df.to_csv(f, sep="\t", index=False, header=False, float_format="%.8f")
     return path
+
+
+def _coordinate_is_rotational(coord) -> bool:
+    try:
+        motion_type = str(coord.getMotionType())
+        if "Rot" in motion_type:
+            return True
+        if "Trans" in motion_type:
+            return False
+    except Exception:
+        pass
+    name = coord.getName() if hasattr(coord, "getName") else ""
+    return not str(name).endswith(("_tx", "_ty", "_tz"))
+
+
+def _coordinate_value_for_storage(coord, state) -> float:
+    value = float(coord.getValue(state))
+    if _coordinate_is_rotational(coord):
+        return float(np.rad2deg(value))
+    return value
+
+
+def _make_marker_weight_set(osim, marker_weights: dict[str, float]):
+    if not marker_weights:
+        return None
+    weight_set_type = getattr(osim, "SetMarkerWeights", None)
+    marker_weight_type = getattr(osim, "MarkerWeight", None)
+    if weight_set_type is None or marker_weight_type is None:
+        raise AttributeError(
+            "This OpenSim build does not expose SetMarkerWeights/MarkerWeight, "
+            "which are required for marker_weights with backend='fast'."
+        )
+    weight_set = weight_set_type()
+    for marker, weight in marker_weights.items():
+        weight_set.cloneAndAppend(marker_weight_type(str(marker), float(weight)))
+    return weight_set
+
+
+def _make_markers_reference(osim, trc_path: Path, marker_weights: dict[str, float]):
+    marker_ref_type = getattr(osim, "MarkersReference", None)
+    if marker_ref_type is None:
+        raise AttributeError("This OpenSim build does not expose MarkersReference.")
+    weight_set = _make_marker_weight_set(osim, marker_weights)
+    errors = []
+    if weight_set is not None:
+        try:
+            return marker_ref_type(str(trc_path), weight_set)
+        except Exception as exc:
+            errors.append(f"MarkersReference(path, weights): {exc}")
+    try:
+        return marker_ref_type(str(trc_path))
+    except Exception as exc:
+        errors.append(f"MarkersReference(path): {exc}")
+    raise TypeError("Could not create OpenSim MarkersReference. " + "; ".join(errors))
+
+
+def _make_coordinate_references(osim):
+    coord_ref_type = getattr(osim, "SimTKArrayCoordinateReference", None)
+    if coord_ref_type is None:
+        raise AttributeError(
+            "This OpenSim build does not expose SimTKArrayCoordinateReference."
+        )
+    return coord_ref_type()
+
+
+def _make_direct_ik_solver(osim, model, markers_reference, coordinate_references):
+    solver_type = getattr(osim, "InverseKinematicsSolver", None)
+    if solver_type is None:
+        raise AttributeError("This OpenSim build does not expose InverseKinematicsSolver.")
+    errors = []
+    for args in (
+        (model, markers_reference, coordinate_references, float("inf")),
+        (model, markers_reference, coordinate_references),
+    ):
+        try:
+            return solver_type(*args)
+        except Exception as exc:
+            errors.append(f"InverseKinematicsSolver/{len(args)} args: {exc}")
+    raise TypeError("Could not create OpenSim InverseKinematicsSolver. " + "; ".join(errors))
 
 
 def _summarize_ik_marker_errors(output_dir: Path) -> dict | None:
@@ -670,6 +756,17 @@ def run_ik(
 ) -> StorageResult:
     osim = require_opensim()
     config = config or OpenSimIKConfig()
+    backend = getattr(config, "backend", "base")
+    if backend not in {"base", "fast"}:
+        raise ValueError("OpenSim IK backend must be either 'base' or 'fast'.")
+    if backend == "fast":
+        return _run_ik_fast(
+            osim=osim,
+            trc_path=trc_path,
+            model_path=model_path,
+            output_dir=output_dir,
+            config=config,
+        )
 
     trc_path = Path(trc_path).resolve()
     model_path = Path(model_path).resolve()
@@ -776,6 +873,7 @@ def run_ik(
         path=mot_path,
         dataframe=read_storage(mot_path),
         metadata={
+            "backend": "base",
             "setup_xml_path": str(setup_xml_path),
             "trc_path": str(trc_path),
             "time_range": [start_time, end_time],
@@ -783,6 +881,97 @@ def run_ik(
             "marker_error_summary": marker_error_summary,
             "log_path": str(log_path),
             "quiet": bool(config.quiet),
+        },
+    )
+
+
+def _run_ik_fast(
+    *,
+    osim,
+    trc_path: str | Path,
+    model_path: str | Path,
+    output_dir: str | Path,
+    config: OpenSimIKConfig,
+) -> StorageResult:
+    trc_path = Path(trc_path).resolve()
+    model_path = Path(model_path).resolve()
+    output_dir = ensure_dir(Path(output_dir).resolve())
+
+    if not trc_path.exists():
+        raise FileNotFoundError(f"TRC file not found: {trc_path}")
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model file not found: {model_path}")
+
+    prefix = config.output_prefix or trc_path.stem
+    trc_path, preflight = _prepare_trc_for_opensim(
+        trc_path,
+        output_dir=output_dir,
+        prefix=prefix,
+        sanitize=bool(config.sanitize_marker_data),
+    )
+    mot_path = output_dir / f"{prefix}_ik.mot"
+    log_path = (output_dir / f"{prefix}_ik_fast.log").resolve()
+
+    trc_trial = load_trc(trc_path)
+    time = trc_trial.markers.time
+    if time is None or len(time) < 2:
+        raise ValueError(f"TRC file must contain at least 2 valid time samples: {trc_path}")
+    times = np.asarray(time, dtype=float)
+    if not np.isfinite(times).all():
+        raise ValueError(f"TRC time vector contains non-finite values after preflight: {trc_path}")
+
+    with _opensim_logging(osim, quiet=bool(config.quiet), log_path=log_path):
+        model = osim.Model(str(model_path))
+        state = model.initSystem()
+        markers_reference = _make_markers_reference(osim, trc_path, config.marker_weights)
+        coordinate_references = _make_coordinate_references(osim)
+        solver = _make_direct_ik_solver(
+            osim,
+            model,
+            markers_reference,
+            coordinate_references,
+        )
+        if hasattr(solver, "setAccuracy"):
+            solver.setAccuracy(float(config.accuracy))
+        elif hasattr(solver, "set_accuracy"):
+            solver.set_accuracy(float(config.accuracy))
+
+        coordset = model.getCoordinateSet()
+        coordinates = [coordset.get(i) for i in range(coordset.getSize())]
+        labels = ["time", *[coord.getName() for coord in coordinates]]
+        rows = np.zeros((len(times), len(labels)), dtype=float)
+        rows[:, 0] = times
+
+        assembled = False
+        for frame_idx, t in enumerate(times):
+            state.setTime(float(t))
+            if not assembled:
+                solver.assemble(state)
+                assembled = True
+            elif hasattr(solver, "track"):
+                solver.track(state)
+            else:
+                solver.assemble(state)
+            model.realizePosition(state)
+            for coord_idx, coord in enumerate(coordinates, start=1):
+                rows[frame_idx, coord_idx] = _coordinate_value_for_storage(coord, state)
+
+    df = pd.DataFrame(rows, columns=labels)
+    _write_storage_from_dataframe(mot_path, df, name=f"{prefix}_ik", in_degrees=True)
+
+    return StorageResult(
+        path=mot_path,
+        dataframe=read_storage(mot_path),
+        metadata={
+            "backend": "fast",
+            "trc_path": str(trc_path),
+            "model_path": str(model_path),
+            "time_range": [float(times[0]), float(times[-1])],
+            "preflight": preflight,
+            "marker_error_summary": None,
+            "log_path": str(log_path),
+            "quiet": bool(config.quiet),
+            "direct_solver": True,
         },
     )
 

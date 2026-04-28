@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.15.23
+
+### Added
+- added `backend="fast"` for `mm.run_ik()` and `OpenSimIKConfig`, using OpenSim's direct `InverseKinematicsSolver` with frame-to-frame warm starts when the installed OpenSim bindings expose the required solver classes
+
+### Changed
+- sped up GLB animation export by caching repeated OpenSim frame transforms within each baked frame
+
 ## 0.15.22
 
 ### Fixed

@@ -12,6 +12,7 @@ from monomech.opensim_api import (
     _read_storage_time_vector,
     _summarize_ik_marker_errors,
     _write_external_loads_data,
+    _write_storage_from_dataframe,
 )
 
 
@@ -79,6 +80,19 @@ def test_prepare_storage_for_opensim_fills_coordinate_nans(tmp_path: Path):
     assert report["sanitized"] is True
     clean = read_storage(prepared)
     assert np.isfinite(clean.to_numpy(dtype=float)).all()
+
+
+def test_write_storage_can_mark_degrees(tmp_path: Path):
+    path = tmp_path / "ik.mot"
+
+    _write_storage_from_dataframe(
+        path,
+        pd.DataFrame({"time": [0.0], "hip_flexion": [10.0]}),
+        name="ik",
+        in_degrees=True,
+    )
+
+    assert "inDegrees=yes" in path.read_text(encoding="utf-8")
 
 
 def test_external_load_resampling_removes_nans(tmp_path: Path):

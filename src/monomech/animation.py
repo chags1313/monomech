@@ -1066,6 +1066,18 @@ def save_opensim_animation(
         item["local_R"] = _euler_deg_xyz_to_matrix(*item["rot"])
         item["local_p"] = item["loc"].astype(float)
 
+    def frame_cache_key(frame) -> str:
+        try:
+            return str(frame.getName())
+        except Exception:
+            return str(id(frame))
+
+    frame_lookup: dict[str, Any] = {}
+    for item in items:
+        key = frame_cache_key(item["frame"])
+        item["frame_key"] = key
+        frame_lookup[key] = item["frame"]
+
     red, green, blue = _hex_to_rgb01(bone_hex)
     material = Material(
         name="Bones",
@@ -1156,10 +1168,23 @@ def save_opensim_animation(
     marker_df = None
     marker_names = []
     marker_positions = None
+    marker_specs = []
     if return_markers:
         marker_set = model.getMarkerSet()
         marker_names = [marker_set.get(i).getName() for i in range(marker_set.getSize())]
         marker_positions = np.zeros((nframes, 3 * len(marker_names)), dtype=float)
+        for marker_idx in range(marker_set.getSize()):
+            marker = marker_set.get(marker_idx)
+            parent = marker.getParentFrame()
+            parent_key = frame_cache_key(parent)
+            frame_lookup[parent_key] = parent
+            marker_specs.append(
+                (
+                    marker_idx,
+                    _simtk_vec3_to_np(marker.get_location()),
+                    parent_key,
+                )
+            )
 
     for frame_number, row in enumerate(data):
         for coord, col, convert_degrees in mapping:
@@ -1172,24 +1197,31 @@ def save_opensim_animation(
                 coord.setValue(state, value)
         model.realizePosition(state)
 
+        transform_cache: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+
+        def get_cached_transform(
+            key: str,
+            cache: dict[str, tuple[np.ndarray, np.ndarray]] = transform_cache,
+        ) -> tuple[np.ndarray, np.ndarray]:
+            cached = cache.get(key)
+            if cached is not None:
+                return cached
+            transform = frame_lookup[key].getTransformInGround(state)
+            cached = (_simtk_rot_to_np(transform.R()), _simtk_vec3_to_np(transform.p()))
+            cache[key] = cached
+            return cached
+
         if marker_positions is not None:
-            marker_set = model.getMarkerSet()
-            for marker_idx in range(marker_set.getSize()):
-                marker = marker_set.get(marker_idx)
-                marker_local = _simtk_vec3_to_np(marker.get_location())
-                parent = marker.getParentFrame()
-                parent_transform = parent.getTransformInGround(state)
-                parent_r = _simtk_rot_to_np(parent_transform.R())
-                marker_global = _simtk_vec3_to_np(parent_transform.p()) + parent_r @ marker_local
+            for marker_idx, marker_local, parent_key in marker_specs:
+                parent_r, parent_p = get_cached_transform(parent_key)
+                marker_global = parent_p + parent_r @ marker_local
                 marker_positions[
                     frame_number,
                     3 * marker_idx : 3 * marker_idx + 3,
                 ] = marker_global
 
         for item_idx, item in enumerate(items):
-            transform = item["frame"].getTransformInGround(state)
-            frame_r = _simtk_rot_to_np(transform.R())
-            frame_p = _simtk_vec3_to_np(transform.p())
+            frame_r, frame_p = get_cached_transform(item["frame_key"])
             rotation = frame_r @ item["local_R"]
             translation = frame_p + frame_r @ item["local_p"]
             translation_tracks[item_idx][frame_number, :] = translation

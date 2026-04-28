@@ -185,6 +185,7 @@ def run_ik(
     markers: str | Path | BaseResult | None = None,
     model: str | Path | None = None,
     output_dir: str | Path = "outputs/ik",
+    backend: Literal["base", "fast"] | None = None,
     config: OpenSimIKConfig | None = None,
 ) -> StorageResult:
     """Run inverse kinematics from a scaled model, model path, or markers."""
@@ -201,6 +202,10 @@ def run_ik(
         trc_path = _write_markers_to_trc(markers, output_dir=output_dir, model_path=model_path)
     if trc_path is None:
         raise ValueError("Provide markers=... or pass a scaled model created by run_scaling().")
+
+    config = config or OpenSimIKConfig()
+    if backend is not None:
+        config.backend = backend
 
     result = _opensim_run_ik(
         trc_path=trc_path,

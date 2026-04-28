@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
 from pathlib import Path
+from typing import Literal
 
 
 @dataclass(slots=True)
@@ -66,6 +66,7 @@ class OpenSimScaleConfig:
 
 @dataclass(slots=True)
 class OpenSimIKConfig:
+    backend: Literal["base", "fast"] = "base"
     marker_weights: dict[str, float] = field(default_factory=dict)
     accuracy: float = 1e-5
     output_prefix: str | None = None

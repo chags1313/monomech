@@ -318,6 +318,8 @@ For direct GLB export, use these knobs when the file is too large or export take
 | `drop_origin_nodes=False` | Keeps every resolved mesh in the scene by default. Set to `True` only when diagnosing unresolved geometry sitting at the origin. |
 | `decimate_target_reduction=0.35` | Reduces mesh triangle count before writing GLB. |
 
+The exporter caches repeated OpenSim frame transforms while baking. Full-body models often have several meshes attached to the same body, so this avoids asking OpenSim for the same body transform again and again within each frame.
+
 For fast previews, start with:
 
 ```python

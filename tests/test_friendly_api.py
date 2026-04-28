@@ -111,3 +111,30 @@ def test_run_ik_accepts_scaled_model_metadata(monkeypatch, tmp_path):
 
     assert ik.metadata["model_path"] == str(model_path)
     assert ik.metadata["trc_path"] == str(trc_path)
+
+
+def test_run_ik_accepts_backend_parameter(monkeypatch, tmp_path):
+    trc_path = tmp_path / "trial.trc"
+    trc_path.write_text("placeholder", encoding="utf-8")
+    model_path = tmp_path / "scaled.osim"
+    model_path.write_text("<OpenSimDocument />", encoding="utf-8")
+    captured = {}
+
+    scaled = OpenSimScaleResult(
+        scaled_model_path=model_path,
+        metadata={"trc_path": str(trc_path)},
+    )
+
+    def fake_run_ik(*, trc_path, model_path, output_dir, config=None):
+        captured["backend"] = config.backend
+        return StorageResult(
+            path=Path(output_dir) / "trial_ik.mot",
+            dataframe=pd.DataFrame({"time": [0.0, 1.0], "hip_flexion": [0.0, 1.0]}),
+            metadata={"trc_path": str(trc_path), "model_path": str(model_path)},
+        )
+
+    monkeypatch.setattr("monomech.api._opensim_run_ik", fake_run_ik)
+
+    mm.run_ik(scaled, output_dir=tmp_path / "ik", backend="fast")
+
+    assert captured["backend"] == "fast"

@@ -85,12 +85,14 @@ def test_opensim_visualizer_writes_dashboard_without_glb(tmp_path):
     )
 
     text = result.html_path.read_text(encoding="utf-8")
-    assert "Three.js model playback" in text
+    assert "Fast OpenSim body playback" in text
     assert "Upload GLB" in text
     assert "pelvis_tilt" in text
     assert "knee_angle_r_moment" in text
     assert "All signals" in text
     assert "external forces" in text
+    assert "body proxies" in text
+    assert "Fast body viewer ready" in text
     assert "model bone overlay" not in text
     assert "modelSkeletonGroup" not in text
     assert result.metadata["force_count"] == 1
@@ -245,6 +247,38 @@ def test_animate_exposes_speed_and_reference_options(monkeypatch, tmp_path):
     assert captured["animation"]["decimate_target_reduction"] == 0.25
     assert captured["visualizer"]["embed_glb"] is False
     assert captured["visualizer"]["max_frames"] == 160
+
+
+def test_animate_fast_render_skips_glb_export(monkeypatch, tmp_path):
+    ik_path = tmp_path / "trial_ik.mot"
+    ik_path.write_text("endheader\ntime pelvis_tx\n0.0 0.0\n", encoding="utf-8")
+    model_path = tmp_path / "model.osim"
+    model_path.write_text("<OpenSimDocument />", encoding="utf-8")
+    captured = {"animation_called": False}
+
+    def fake_animation(**kwargs):
+        captured["animation_called"] = True
+        raise AssertionError("fast render should not export GLB")
+
+    def fake_visualizer(html_path, **kwargs):
+        captured["visualizer"] = {"html_path": html_path, **kwargs}
+        html_path = Path(html_path)
+        html_path.write_text("viewer", encoding="utf-8")
+        return mm.OpenSimVisualizerResult(html_path=html_path, metadata=kwargs)
+
+    monkeypatch.setattr("monomech.api.save_opensim_animation", fake_animation)
+    monkeypatch.setattr("monomech.api.save_opensim_visualizer", fake_visualizer)
+
+    result = mm.animate(
+        ik=ik_path,
+        model=model_path,
+        output_dir=tmp_path / "viz",
+        render="fast",
+    )
+
+    assert result.html_path.name == "trial.html"
+    assert captured["animation_called"] is False
+    assert captured["visualizer"]["glb_path"] is None
 
 
 def test_visualizer_keeps_all_storage_signals(tmp_path):

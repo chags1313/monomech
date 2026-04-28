@@ -1306,6 +1306,11 @@ def save_opensim_animation(
         visualizer_payload = {
             "title": "monomech IK and ID visualizer",
             "markers": marker_payload,
+            "bodies": _body_transform_payload(
+                osim_path=osim_path,
+                ik_path=mot_path,
+                target_time=marker_payload["time"],
+            ),
             "forces": _external_load_payload(
                 external_loads_path,
                 target_time=marker_payload["time"],
@@ -1721,6 +1726,123 @@ def _infer_marker_segments(marker_names: list[str]) -> list[list[int]]:
     return out
 
 
+def _body_transform_payload(
+    *,
+    osim_path: str | Path | None,
+    ik_path: str | Path | None,
+    target_time: list[float],
+) -> dict[str, Any] | None:
+    if osim_path is None or ik_path is None or not target_time:
+        return None
+    try:
+        osim = _require_opensim_dependency()
+        model = osim.Model(str(Path(osim_path).expanduser().resolve()))
+        state = model.initSystem()
+        in_degrees, ik_times, labels, ik_data = _read_mot_or_sto(Path(ik_path).expanduser().resolve(), osim)
+        mapping, _ = _coordinate_mapping(model, labels, in_degrees=in_degrees)
+        body_set = model.getBodySet()
+        body_names = [body_set.get(i).getName() for i in range(body_set.getSize())]
+    except Exception as exc:
+        return {"names": [], "time": [], "frames": [], "segments": [], "warning": str(exc)}
+
+    if not mapping or len(ik_times) < 2:
+        return {
+            "names": body_names,
+            "time": [],
+            "frames": [],
+            "segments": [],
+            "warning": "Could not map IK coordinates to OpenSim body transforms.",
+        }
+
+    frames = []
+    for target in np.asarray(target_time, dtype=float):
+        if not np.isfinite(target):
+            continue
+        row = np.empty(ik_data.shape[1], dtype=float)
+        for col in range(ik_data.shape[1]):
+            row[col] = float(np.interp(target, ik_times, ik_data[:, col]))
+        for coord, col, convert_degrees in mapping:
+            value = float(row[col])
+            if convert_degrees:
+                value *= np.pi / 180.0
+            try:
+                coord.setValue(state, value, True)
+            except Exception:
+                coord.setValue(state, value)
+        model.realizePosition(state)
+        frame = []
+        for body_name in body_names:
+            transform = body_set.get(body_name).getTransformInGround(state)
+            frame.append(
+                {
+                    "p": np.round(_simtk_vec3_to_np(transform.p()), 6).astype(float).tolist(),
+                    "q": np.round(_matrix_to_quat_xyzw(_simtk_rot_to_np(transform.R())), 6)
+                    .astype(float)
+                    .tolist(),
+                }
+            )
+        frames.append(frame)
+
+    return {
+        "names": body_names,
+        "time": [float(t) for t in target_time],
+        "frames": frames,
+        "segments": _infer_body_segments(body_names),
+    }
+
+
+def _infer_body_segments(body_names: list[str]) -> list[list[int]]:
+    index = {name: i for i, name in enumerate(body_names)}
+
+    def has(name: str) -> bool:
+        return name in index
+
+    pairs = []
+
+    def add(a: str, b: str) -> None:
+        if has(a) and has(b):
+            pairs.append([index[a], index[b]])
+
+    add("pelvis", "torso")
+    add("torso", "head")
+    add("pelvis", "femur_r")
+    add("femur_r", "tibia_r")
+    add("tibia_r", "talus_r")
+    add("talus_r", "calcn_r")
+    add("calcn_r", "toes_r")
+    add("pelvis", "femur_l")
+    add("femur_l", "tibia_l")
+    add("tibia_l", "talus_l")
+    add("talus_l", "calcn_l")
+    add("calcn_l", "toes_l")
+    add("torso", "humerus_r")
+    add("humerus_r", "ulna_r")
+    add("ulna_r", "radius_r")
+    add("radius_r", "hand_r")
+    add("torso", "humerus_l")
+    add("humerus_l", "ulna_l")
+    add("ulna_l", "radius_l")
+    add("radius_l", "hand_l")
+
+    # Fallback for common simplified/full-body variants.
+    for side in ("r", "l"):
+        add("pelvis", f"femur_{side}")
+        add(f"femur_{side}", f"tibia_{side}")
+        add(f"tibia_{side}", f"foot_{side}")
+        add("torso", f"humerus_{side}")
+        add(f"humerus_{side}", f"radius_{side}")
+        add(f"radius_{side}", f"hand_{side}")
+
+    out = []
+    seen = set()
+    for a, b in pairs:
+        key = tuple(sorted((a, b)))
+        if a != b and key not in seen:
+            out.append([a, b])
+            seen.add(key)
+    return out
+
+
 def _external_load_payload(
     path: str | Path | None,
     *,
@@ -2019,7 +2141,7 @@ def _write_visualizer_html(
 <body>
   <header>
     <h1>__TITLE__</h1>
-    <div class="sub">Three.js model playback with marker fallback, external-force arrows, complete IK coordinate plots, and complete inverse-dynamics traces.</div>
+    <div class="sub">Fast OpenSim body playback, optional GLB mesh playback, external-force arrows, complete IK coordinate plots, and complete inverse-dynamics traces.</div>
   </header>
   <main>
     <section>
@@ -2031,6 +2153,7 @@ def _write_visualizer_html(
         <canvas id="threeScene"></canvas>
         <div class="legend">
           <span class="pill">teal: markers</span>
+          <span class="pill">gray: body proxies</span>
           <span class="pill">dark lines: marker skeleton</span>
           <span class="pill">orange: external forces</span>
         </div>
@@ -2050,7 +2173,7 @@ def _write_visualizer_html(
         <button id="toggleForces" class="active">Forces</button>
         <label>Upload GLB<input id="glbUpload" type="file" accept=".glb,model/gltf-binary"></label>
       </div>
-      <div class="notice" id="viewerNotice">Upload a monomech GLB or open an exported viewer to inspect synchronized model motion, markers, external forces, IK, and inverse dynamics.</div>
+      <div class="notice" id="viewerNotice">Inspect synchronized OpenSim body motion, markers, external forces, IK, and inverse dynamics. Upload a GLB when full anatomical surface meshes are needed.</div>
     </section>
     <div class="stack">
       <section>
@@ -2077,9 +2200,11 @@ def _write_visualizer_html(
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
     const emptyMarkers = () => ({names:[], time:[], frames:[], segments:[]});
+    const emptyBodies = () => ({names:[], time:[], frames:[], segments:[]});
     const emptyStore = () => ({path:null, columns:[], time:[], series:{}});
     let data = JSON.parse(document.getElementById('payload').textContent);
     let marker = data.markers || emptyMarkers();
+    let body = data.bodies || emptyBodies();
     let force = data.forces || {names:[], frames:[]};
     const scrub = document.getElementById('scrub');
     const timeLabel = document.getElementById('time');
@@ -2097,6 +2222,7 @@ def _write_visualizer_html(
     function refreshStats() {
       document.getElementById('stats').innerHTML = [
         ['Frames', marker.frames.length],
+        ['Bodies', body.names?.length || 0],
         ['Markers', marker.names.length],
         ['Forces', (force.names || []).length],
         ['IK traces', data.ik?.columns?.length || 0],
@@ -2127,7 +2253,44 @@ def _write_visualizer_html(
     const skeletonGroup = new THREE.Group();
     const forceGroup = new THREE.Group();
     const modelGroup = new THREE.Group();
+    const bodyProxyGroup = new THREE.Group();
+    modelGroup.add(bodyProxyGroup);
     scene.add(modelGroup, skeletonGroup, markersGroup, forceGroup);
+
+    const bodyMaterial = new THREE.MeshStandardMaterial({ color:0x6b7470, roughness:.68, metalness:0.0 });
+    const bodyJointMaterial = new THREE.MeshStandardMaterial({ color:0x39433f, roughness:.62, metalness:0.0 });
+    const bodyJointGeom = new THREE.SphereGeometry(0.026, 16, 12);
+    const bodyLineMaterial = new THREE.LineBasicMaterial({ color:0x56615d, linewidth:2 });
+    let bodyMeshes = [];
+    let bodyLines = [];
+    function bodyScale(name) {
+      const n = String(name || '').toLowerCase();
+      if (n.includes('pelvis') || n.includes('torso')) return [0.09, 0.055, 0.055];
+      if (n.includes('head')) return [0.075, 0.075, 0.075];
+      if (n.includes('femur') || n.includes('tibia') || n.includes('humerus')) return [0.065, 0.035, 0.035];
+      if (n.includes('foot') || n.includes('calcn')) return [0.075, 0.035, 0.045];
+      return [0.045, 0.032, 0.032];
+    }
+    function rebuildBodyScene() {
+      bodyProxyGroup.clear();
+      bodyMeshes = (body.names || []).map((name) => {
+        const mesh = new THREE.Mesh(bodyJointGeom, bodyMaterial);
+        const s = bodyScale(name);
+        mesh.scale.set(s[0] / 0.026, s[1] / 0.026, s[2] / 0.026);
+        mesh.name = name;
+        bodyProxyGroup.add(mesh);
+        return mesh;
+      });
+      bodyLines = (body.segments || []).map(([a,b]) => {
+        const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+        const line = new THREE.Line(geom, bodyLineMaterial);
+        line.userData = { a, b };
+        bodyProxyGroup.add(line);
+        return line;
+      });
+      if (bodyMeshes.length) status.textContent = 'Fast body viewer ready';
+    }
+    rebuildBodyScene();
 
     const markerMaterial = new THREE.MeshStandardMaterial({ color:0x0f766e, roughness:.55, metalness:0.0 });
     const markerGeom = new THREE.SphereGeometry(0.018, 16, 12);
@@ -2179,6 +2342,26 @@ def _write_visualizer_html(
         forceGroup.add(arrow);
       }
     }
+    function updateBodies(i) {
+      const frame = (body.frames || [])[i] || [];
+      bodyMeshes.forEach((mesh, bi) => {
+        const item = frame[bi];
+        const p = item?.p;
+        mesh.visible = validPoint(p);
+        if (mesh.visible) {
+          mesh.position.set(p[0], p[1], p[2]);
+          const q = item?.q;
+          if (q && q.length === 4 && q.every(Number.isFinite)) {
+            mesh.quaternion.set(q[0], q[1], q[2], q[3]);
+          }
+        }
+      });
+      bodyLines.forEach((line) => {
+        const a = frame[line.userData.a]?.p, b = frame[line.userData.b]?.p;
+        line.visible = validPoint(a) && validPoint(b);
+        if (line.visible) setLinePositions(line, a, b);
+      });
+    }
     function updateFrame(i) {
       const n = Math.max(1, timelineFrames);
       idx = ((Math.round(i) % n) + n) % n;
@@ -2193,6 +2376,7 @@ def _write_visualizer_html(
         line.visible = validPoint(a) && validPoint(b);
         if (line.visible) setLinePositions(line, a, b);
       });
+      updateBodies(idx);
       updateForces(idx);
       scrub.value = idx;
       setMixerToFrame(idx);
@@ -2259,6 +2443,7 @@ def _write_visualizer_html(
           }
         });
         modelGroup.add(glbRoot);
+        bodyProxyGroup.visible = false;
         mixer = gltf.animations.length ? new THREE.AnimationMixer(glbRoot) : null;
         glbDuration = gltf.animations[0]?.duration || 0;
         if (mixer) mixer.clipAction(gltf.animations[0]).play();
@@ -2404,12 +2589,14 @@ def _write_visualizer_html(
       data.title = embedded.title || data.title;
       data.force_scale = embedded.force_scale || data.force_scale || 0.35;
       Object.assign(marker, embedded.markers || emptyMarkers());
+      Object.assign(body, embedded.bodies || emptyBodies());
       Object.assign(force, embedded.forces || {names:[], frames:[]});
       Object.assign(data.ik, embedded.ik || emptyStore());
       Object.assign(data.id, embedded.id || emptyStore());
       if (force?.diagnostics?.warning) notice.textContent = force.diagnostics.warning;
       else notice.textContent = 'GLB metadata loaded. Model motion, forces, IK, and inverse dynamics are synchronized.';
       rebuildMarkerScene();
+      rebuildBodyScene();
       syncTimeline();
       refreshStats();
       ikPlot.refreshSelect();
@@ -2506,6 +2693,11 @@ def save_opensim_visualizer(
     payload = {
         "title": title,
         "markers": markers,
+        "bodies": _body_transform_payload(
+            osim_path=osim_path,
+            ik_path=ik_path,
+            target_time=markers["time"],
+        ),
         "forces": forces,
         "ik": _storage_for_visualizer(ik_path),
         "id": _storage_for_visualizer(id_path),
@@ -2527,6 +2719,46 @@ def save_opensim_visualizer(
         else str(Path(external_loads_path).expanduser().resolve()),
     }
     return OpenSimVisualizerResult(html_path=html_path, metadata=metadata)
+
+
+def save_opensim_fast_visualizer(
+    html_path: str | Path,
+    *,
+    osim_path: str | Path,
+    ik_path: str | Path,
+    id_path: str | Path | None = None,
+    external_loads_path: str | Path | None = None,
+    marker_dataframe: pd.DataFrame | None = None,
+    title: str = "monomech fast IK and ID visualizer",
+    max_frames: int = 240,
+    marker_stride: int = 1,
+) -> OpenSimVisualizerResult:
+    """Write the fast OpenSim HTML viewer without exporting or loading a GLB.
+
+    The fast viewer uses OpenSim body transforms to animate lightweight body
+    proxies, markers, force arrows, IK traces, and ID traces. Use
+    `save_opensim_animation()` when full anatomical surface meshes are needed.
+    """
+
+    return save_opensim_visualizer(
+        html_path,
+        osim_path=osim_path,
+        ik_path=ik_path,
+        id_path=id_path,
+        external_loads_path=external_loads_path,
+        glb_path=None,
+        marker_dataframe=marker_dataframe,
+        title=title,
+        max_frames=max_frames,
+        marker_stride=marker_stride,
+        embed_glb=False,
+    )
+
+
+def save_opensim_glb(**kwargs) -> OpenSimAnimationResult:
+    """Alias for `save_opensim_animation()` when the goal is only the GLB file."""
+
+    return save_opensim_animation(**kwargs)
 
 
 def show_ik_animation(html_path: str | Path, glb_path: str | Path) -> Path:

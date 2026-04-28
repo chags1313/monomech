@@ -9,7 +9,7 @@ Single-camera biomechanics that stays inspectable from the first video frame to 
 <span class="mono-badge">Video to TRC</span>
 <span class="mono-badge">External loads</span>
 <span class="mono-badge">OpenSim IK and ID</span>
-<span class="mono-badge">GLB animation</span>
+<span class="mono-badge">Fast viewer and GLB animation</span>
 </div>
 
 </section>
@@ -44,9 +44,9 @@ Single-camera biomechanics that stays inspectable from the first video frame to 
 
     [:octicons-arrow-right-24: OpenSim guide](stages/opensim.md)
 
--   :material-cube-scan: **I need an animation**
+-   :material-cube-scan: **I need a viewer**
 
-    Export IK motion and optional ID metadata into a single portable `.glb` file.
+    Review IK, ID, forces, and body motion quickly, then export a GLB when you need full meshes.
 
     [:octicons-arrow-right-24: Animation export](stages/animation.md)
 
@@ -64,7 +64,7 @@ flowchart LR
   E --> H["Inverse dynamics"]
   G --> H
   H --> I["STO tables for analysis"]
-  E --> J["Animated GLB"]
+  E --> J["Fast viewer or animated GLB"]
   H --> J
 ```
 
@@ -148,6 +148,7 @@ viewer = mm.animate(
     id=id_result,
     external_loads_path=id_result.metadata["external_loads_mot_path"],
     output_dir=output_dir / "visualizer",
+    render="fast",
 )
 viewer.show()
 ```
@@ -187,8 +188,8 @@ OpenSim tools can fail on NaNs, infinite values, mismatched timing, or missing f
 
     Use [Outputs and files](outputs.md) to understand CSV, TRC, MOT, STO, XML, and model artifacts.
 
--   **Animations**
+-   **Visualization**
 
-    Export a single GLB from IK and ID outputs with [OpenSim animation export](stages/animation.md).
+    Use the fast no-GLB visualizer for notebook review, or export a single GLB from IK and ID outputs with [OpenSim animation export](stages/animation.md).
 
 </div>

@@ -171,7 +171,7 @@ animation = mm.save_opensim_animation(
 print(animation.glb_path)
 ```
 
-Create a notebook-friendly Three.js dashboard with the animated model, marker fallback, force arrows, IK plots, and ID plots:
+Create a fast notebook-friendly Three.js dashboard with OpenSim body proxies, marker fallback, force arrows, IK plots, and ID plots:
 
 ```python
 viewer = mm.animate(
@@ -180,11 +180,12 @@ viewer = mm.animate(
     model="models/subject01_scaled.osim",
     output_dir="outputs/subject01/visualizer",
     external_loads_path=result.id.metadata["external_loads_mot_path"],
+    render="fast",
 )
 viewer.show()
 ```
 
-The dashboard is a standalone HTML file, so it works in notebooks, local browsers, and GitHub Pages. `mm.animate()` writes the GLB next to the HTML and references that file by default, which keeps notebooks fast. Pass `embed_glb=True` only when you need one self-contained HTML file. The online visualizer starts empty and includes an **Upload GLB** control, which lets a reader drag in their own exported model without sending the file anywhere.
+The fast dashboard is a standalone HTML file, so it works in notebooks, local browsers, and GitHub Pages without waiting for GLB export. It controls lightweight body proxy meshes from OpenSim body transforms. When you need full anatomical surface meshes, use `render="glb"` or call `mm.save_opensim_glb(...)`; the dashboard will reference the sibling GLB by default. Pass `embed_glb=True` only when you need one self-contained HTML file. The online visualizer starts empty and includes an **Upload GLB** control, which lets a reader drag in their own exported model without sending the file anywhere.
 
 For a carried object plus estimated ground-reaction forces:
 
@@ -281,8 +282,8 @@ Add `--opensim` when OpenSim-compatible bindings are installed.
 GitHub Actions builds distributions on every push to `main`. PyPI publishing goes directly to PyPI through trusted publishing and is triggered by version tags such as:
 
 ```bash
-git tag v0.15.16
-git push origin v0.15.16
+git tag v0.15.17
+git push origin v0.15.17
 ```
 
 The publish workflow can also be run manually from GitHub Actions with the `publish` input set to `true`.

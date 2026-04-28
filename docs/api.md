@@ -236,7 +236,7 @@ The `mm.external` factory exposes lower-level constructors:
 
 ## Animation And Visualization
 
-### `animate(*, ik, id=None, model=None, output_dir="outputs/visualizer", name=None, external_loads_path=None, create_glb=True, mode="balanced", stride=None, decimate_target_reduction=None, decimate_error=None, thin_pos_tol=1e-4, thin_rot_tol_deg=0.05, drop_static_nodes=False, drop_origin_nodes=False, max_frames=240, marker_stride=1, embed_glb=False)`
+### `animate(*, ik, id=None, model=None, output_dir="outputs/visualizer", name=None, external_loads_path=None, render="glb", create_glb=True, mode="balanced", stride=None, decimate_target_reduction=None, decimate_error=None, thin_pos_tol=1e-4, thin_rot_tol_deg=0.05, drop_static_nodes=False, drop_origin_nodes=False, max_frames=240, marker_stride=1, embed_glb=False)`
 
 Create a notebook-ready Three.js visualizer.
 
@@ -252,7 +252,9 @@ viewer = mm.animate(
 viewer.show()
 ```
 
-The visualizer can show the animated GLB mesh, marker fallback, force arrows, IK traces, and ID traces. By default, the HTML references a sibling GLB file instead of embedding it, which keeps notebooks and docs responsive. Use `embed_glb=True` only when you need a single self-contained HTML file.
+The visualizer can show body motion, marker fallback, force arrows, IK traces, and ID traces. Use `render="fast"` for immediate notebook review without writing a GLB. The fast viewer animates lightweight OpenSim body proxies from body transforms, so forces and traces stay synchronized while avoiding mesh export. Use `render="glb"` when you need full anatomical surface meshes.
+
+With `render="glb"`, the HTML references a sibling GLB file instead of embedding it, which keeps notebooks and docs responsive. Use `embed_glb=True` only when you need a single self-contained HTML file.
 
 In Jupyter, `viewer.show()` uses Jupyter's `/files/` route when the output folder is under the notebook working directory, so the browser streams the sibling GLB directly. Use `viewer.show(inline_glb=True)` only when your notebook server cannot serve local files.
 
@@ -266,7 +268,8 @@ In Jupyter, `viewer.show()` uses Jupyter's `/files/` route when the output folde
 
 | Function | Purpose |
 | --- | --- |
-| `save_opensim_animation(...)` | Export OpenSim IK motion to GLB. |
+| `save_opensim_animation(...)` / `save_opensim_glb(...)` | Export OpenSim IK motion to GLB. |
+| `save_opensim_fast_visualizer(...)` | Write the fast no-GLB IK/ID dashboard with OpenSim body proxies. |
 | `save_opensim_visualizer(...)` | Write the full IK/ID HTML dashboard. |
 | `save_animation_viewer(...)` | Write a lightweight GLB-only viewer. |
 | `display_visualizer(...)` | Display an existing visualizer in Jupyter. |

@@ -134,9 +134,39 @@ Open `viewer.html` in a browser to inspect the animation. The lightweight viewer
 
 ## Notebook IK/ID Dashboard
 
-For notebooks and review sessions, use `save_opensim_visualizer()`. It creates a richer Three.js HTML dashboard with:
+For notebooks and review sessions, use the fast visualizer first. It avoids GLB export and animates lightweight OpenSim body proxies directly from IK-driven body transforms:
 
-- animated OpenSim GLB mesh playback when a model is available
+```python
+viewer = mm.animate(
+    ik=ik,
+    id=id_result,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    output_dir="outputs/subject01/visualizer",
+    render="fast",
+)
+viewer.show()
+```
+
+The fast viewer is the best default for checking motion, carried-load placement, ground-reaction arrows, IK coordinates, and inverse-dynamics traces during analysis. It controls body proxy meshes correctly, but it does not render the full anatomical surface meshes.
+
+Use the GLB path when you need the full model geometry:
+
+```python
+viewer = mm.animate(
+    ik=ik,
+    id=id_result,
+    external_loads_path=id_result.metadata["external_loads_mot_path"],
+    output_dir="outputs/subject01/visualizer",
+    render="glb",
+    mode="balanced",
+)
+viewer.show()
+```
+
+`save_opensim_visualizer()` creates the same Three.js HTML dashboard and can be paired with or without a GLB. It includes:
+
+- fast OpenSim body proxy playback
+- animated OpenSim GLB mesh playback when a GLB is provided
 - a 3D marker/skeleton fallback
 - external-force arrows from the generated external-load `.mot`
 - synchronized IK coordinate plots
@@ -179,6 +209,7 @@ animation = mm.animate(
     id=id_result,
     external_loads_path=id_result.metadata["external_loads_mot_path"],
     output_dir="outputs/subject01/visualizer",
+    render="fast",
     mode="preview",  # use "balanced" or "final" for higher quality
 )
 

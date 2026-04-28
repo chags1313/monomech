@@ -339,6 +339,7 @@ def animate(
     name: str | None = None,
     external_loads_path: str | Path | None = None,
     create_glb: bool = True,
+    render: Literal["fast", "glb"] = "glb",
     mode: Literal["preview", "balanced", "final"] = "balanced",
     stride: int | None = None,
     decimate_target_reduction: float | None = None,
@@ -352,6 +353,11 @@ def animate(
     embed_glb: bool = False,
 ) -> OpenSimVisualizerResult:
     """Create a notebook-ready OpenSim animation visualizer."""
+
+    if render not in {"fast", "glb"}:
+        raise ValueError("render must be either 'fast' or 'glb'.")
+    if render == "fast":
+        create_glb = False
 
     ik_path = ik.path if isinstance(ik, StorageResult) else Path(ik).expanduser().resolve()
     id_path = (
@@ -424,6 +430,32 @@ def animate(
         max_frames=viewer_max_frames,
         marker_stride=viewer_marker_stride,
         embed_glb=embed_glb,
+    )
+
+
+def fast_viewer(
+    *,
+    ik: StorageResult | str | Path,
+    id: StorageResult | str | Path | None = None,
+    model: str | Path | None = None,
+    output_dir: str | Path = "outputs/visualizer",
+    name: str | None = None,
+    external_loads_path: str | Path | None = None,
+    max_frames: int = 240,
+    marker_stride: int = 1,
+) -> OpenSimVisualizerResult:
+    """Create the fast no-GLB OpenSim viewer."""
+
+    return animate(
+        ik=ik,
+        id=id,
+        model=model,
+        output_dir=output_dir,
+        name=name,
+        external_loads_path=external_loads_path,
+        render="fast",
+        max_frames=max_frames,
+        marker_stride=marker_stride,
     )
 
 

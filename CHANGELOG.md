@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.15.17
+
+### Added
+- added `animate(render="fast")` and `fast_viewer()` for a no-GLB notebook visualizer
+- added `save_opensim_fast_visualizer()` for HTML-only IK/ID review with OpenSim body proxy meshes
+- added `save_opensim_glb()` as an explicit GLB-only export alias
+
+### Changed
+- the IK/ID visualizer now renders fast OpenSim body proxies when no GLB is provided, while uploaded or exported GLBs still provide full anatomical surface meshes
+
 ## 0.15.16
 
 ### Fixed

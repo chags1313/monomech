@@ -122,15 +122,11 @@ animation = mm.save_opensim_animation(
 Write a lightweight local Three.js viewer for the GLB:
 
 ```python
-viewer = mm.save_animation_viewer(
-    "outputs/subject01/animation/viewer.html",
-    animation.glb_path,
-)
-
-print(viewer)
+viewer = mm.create_glb_viewer(animation.glb_path)
+viewer.show()
 ```
 
-Open `viewer.html` in a browser to inspect the animation. The lightweight viewer embeds the GLB so it can travel as one file. The full IK/ID dashboard created by `mm.animate()` references a sibling GLB by default, which keeps notebooks fast. Pass `embed_glb=True` to `mm.animate()` only when you need one self-contained HTML file.
+This writes a tiny HTML shell next to the GLB and references the GLB by path. The notebook displays the shell immediately, then the browser streams the GLB file. Use `save_animation_viewer(..., embed_glb=True)` only when you need one self-contained HTML file.
 
 ## Notebook IK/ID Dashboard
 

@@ -1391,7 +1391,7 @@ def save_animation_viewer(
     glb_path: str | Path,
     *,
     title: str = "monomech OpenSim animation",
-    embed_glb: bool = True,
+    embed_glb: bool = False,
 ) -> Path:
     """Write a small Three.js HTML viewer for a GLB animation."""
 
@@ -1402,6 +1402,32 @@ def save_animation_viewer(
     payload = {"title": title, "glb_path": glb_ref}
     _write_simple_glb_viewer_html(html_path, title=title, payload=payload)
     return html_path
+
+
+def create_glb_viewer(
+    glb_path: str | Path,
+    html_path: str | Path | None = None,
+    *,
+    title: str = "monomech OpenSim animation",
+    embed_glb: bool = False,
+) -> OpenSimVisualizerResult:
+    """Create a tiny path-based GLB viewer that displays quickly in notebooks."""
+
+    glb = Path(glb_path).expanduser().resolve()
+    if not glb.is_file():
+        raise FileNotFoundError(f"GLB file not found: {glb}")
+    if html_path is None:
+        html_path = glb.with_suffix(".viewer.html")
+    html = save_animation_viewer(html_path, glb, title=title, embed_glb=embed_glb)
+    return OpenSimVisualizerResult(
+        html_path=Path(html),
+        metadata={
+            "html_path": str(Path(html).expanduser().resolve()),
+            "glb_path": str(glb),
+            "embedded_glb": bool(embed_glb),
+            "viewer_kind": "glb",
+        },
+    )
 
 
 def _asset_reference(path: Path, relative_to: Path, *, embed: bool = False) -> str:

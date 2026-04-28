@@ -3,6 +3,7 @@
 from .animation import (
     OpenSimAnimationResult,
     OpenSimVisualizerResult,
+    create_glb_viewer,
     display_visualizer,
     extract_opensim_marker_positions,
     save_animation_viewer,
@@ -105,6 +106,7 @@ __all__ = [
     "estimate_loads_from_pose",
     "OpenSimAnimationResult",
     "OpenSimVisualizerResult",
+    "create_glb_viewer",
     "display_visualizer",
     "extract_opensim_marker_positions",
     "save_opensim_animation",

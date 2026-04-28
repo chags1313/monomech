@@ -20,10 +20,24 @@ def test_animation_viewer_uses_relative_glb(tmp_path):
     html = mm.save_animation_viewer(tmp_path / "viewer.html", glb, title="Test animation")
 
     text = html.read_text(encoding="utf-8")
-    assert '"glb_path": "data:model/gltf-binary;base64,' in text
+    assert '"glb_path": "motion.glb"' in text
+    assert "data:model/gltf-binary;base64" not in text
     assert "GLTFLoader" in text
     assert "Upload GLB" in text
     assert "Test animation" in text
+
+
+def test_create_glb_viewer_returns_notebook_result(tmp_path):
+    glb = tmp_path / "motion.glb"
+    glb.write_bytes(b"glb")
+
+    viewer = mm.create_glb_viewer(glb)
+
+    assert viewer.html_path.name == "motion.viewer.html"
+    assert viewer.metadata["glb_path"] == str(glb)
+    assert viewer.metadata["embedded_glb"] is False
+    text = viewer.html_path.read_text(encoding="utf-8")
+    assert '"glb_path": "motion.glb"' in text
 
 
 def test_animation_extra_is_optional():

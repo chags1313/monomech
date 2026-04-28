@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.15.19
+
+### Added
+- added `create_glb_viewer()` for a tiny notebook-friendly HTML shell that path-loads an existing GLB
+
+### Changed
+- made `save_animation_viewer()` reference the GLB path by default instead of embedding the whole binary in the HTML
+
 ## 0.15.18
 
 ### Fixed

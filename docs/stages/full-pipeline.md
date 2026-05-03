@@ -2,6 +2,8 @@
 
 The pipeline helpers run the common workflows in one call while still returning every stage output. Use the one-line functions for repeatable processing, and use the staged calls when you are tuning model fit, marker cleanup, external loads, or OpenSim settings.
 
+![Pipeline overview](../assets/images/pipeline-overview.png)
+
 ## Notebook Workflow
 
 Use the short names when you want each processing step to be visible and inspectable:
@@ -36,6 +38,14 @@ ik.plot()
 ik.to_csv("outputs/subject01/ik.csv")
 ```
 
+![2D landmarks on source frame](../assets/images/stage-01-2d-pose-overlay.png)
+
+![Root-centered 3D pose](../assets/images/stage-02-root-centered-3d-pose.png)
+
+![Global 3D pose after PnP and floor alignment](../assets/images/stage-03-pnp-global-3d-pose.png)
+
+![Synchronized viewer preview](../assets/images/stage-07-animation-viewer-showcase.png)
+
 Add loads, run ID, and display the notebook visualizer:
 
 ```python
@@ -58,6 +68,12 @@ animation = mm.animate(
 
 animation.show()
 ```
+
+![IK coordinate signals](../assets/images/stage-04-ik-coordinate-signals.png)
+
+![Estimated external-load signals](../assets/images/stage-05-estimated-force-signals.png)
+
+![Inverse-dynamics output signals](../assets/images/stage-06-id-output-signals.png)
 
 ## Video To TRC
 

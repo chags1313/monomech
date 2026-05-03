@@ -37,6 +37,24 @@ Only run OpenSim after marker names, units, and time ranges look sensible.
 </div>
 </div>
 
+## What A Complete Example Shows
+
+The full video-to-ID notebook is organized around the same checkpoints used by the docs tour. You should be able to see the 2D pose on the source image, the root-centered 3D pose, the global pose after PnP and floor alignment, key IK angles, estimated force signals, key ID kinetics, and the synchronized animation viewer.
+
+![2D landmarks on source frame](assets/images/stage-01-2d-pose-overlay.png)
+
+![Root-centered 3D pose](assets/images/stage-02-root-centered-3d-pose.png)
+
+![Global 3D pose after PnP and floor alignment](assets/images/stage-03-pnp-global-3d-pose.png)
+
+![IK coordinate signals](assets/images/stage-04-ik-coordinate-signals.png)
+
+![Estimated external-load signals](assets/images/stage-05-estimated-force-signals.png)
+
+![Inverse-dynamics output signals](assets/images/stage-06-id-output-signals.png)
+
+![Animation viewer showcase](assets/images/stage-07-animation-viewer-showcase.png)
+
 ## Full Video To ID Example
 
 ```python

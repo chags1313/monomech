@@ -226,7 +226,7 @@ def test_inline_notebook_visualizer_can_inject_glb_when_requested(tmp_path):
     assert "Z2xi" in html
 
 
-def test_inline_simple_glb_viewer_skips_path_autoload(tmp_path):
+def test_inline_glb_viewer_skips_path_autoload(tmp_path):
     glb_path = tmp_path / "motion.glb"
     glb_path.write_bytes(b"glb")
     viewer = mm.create_glb_viewer(glb_path)
@@ -246,6 +246,8 @@ def test_glb_viewer_can_create_upload_first_base_viewer(tmp_path):
     assert '"glb_path": null' in text
     assert "Upload GLB" in text
     assert "3D Model, Markers, And Forces" in text
+    assert "IK Coordinates" in text
+    assert "Inverse Dynamics" in text
 
 
 def test_colab_display_uses_inline_html(monkeypatch, tmp_path):

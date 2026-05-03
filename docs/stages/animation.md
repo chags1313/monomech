@@ -4,6 +4,8 @@
 
 Use this when you want a portable file for review, presentation, web viewing, or sharing a quick motion result without opening the OpenSim GUI.
 
+![GLB skeletal viewer preview](../assets/images/stage-07-animation-viewer-showcase.png)
+
 ## Install
 
 Animation export needs optional 3D dependencies:

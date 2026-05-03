@@ -246,6 +246,225 @@ def _infer_image_size_from_pose2d(pose2d: Pose2DResult | None) -> tuple[int, int
     return width, height
 
 
+def _indices_for_names(landmark_names: list[str], names: list[str]) -> tuple[list[int], list[str]]:
+    index = {name: i for i, name in enumerate(landmark_names)}
+    lower_index = {name.lower(): i for i, name in enumerate(landmark_names)}
+    indices: list[int] = []
+    resolved: list[str] = []
+    for name in names:
+        idx = index.get(name)
+        if idx is None:
+            idx = lower_index.get(name.lower())
+        if idx is not None:
+            indices.append(idx)
+            resolved.append(landmark_names[idx])
+    return indices, resolved
+
+
+def _percentile(value: float | None, *, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        p = float(value)
+    except Exception:
+        return default
+    if 0.0 < p <= 1.0:
+        p *= 100.0
+    return float(np.clip(p, 0.0, 100.0))
+
+
+def _infer_raw_y_direction(data: np.ndarray, landmark_names: list[str]) -> float:
+    foot_indices, _ = _indices_for_names(landmark_names, FOOT_MARKERS)
+    hip_indices, _ = _indices_for_names(landmark_names, ["left_hip", "right_hip"])
+    if not foot_indices or not hip_indices:
+        return 1.0
+
+    foot_y = data[:, foot_indices, 1].reshape(-1)
+    hip_y = data[:, hip_indices, 1].reshape(-1)
+    foot_y = foot_y[np.isfinite(foot_y)]
+    hip_y = hip_y[np.isfinite(hip_y)]
+    if not len(foot_y) or not len(hip_y):
+        return 1.0
+
+    # OpenCV/PnP camera coordinates use positive Y downward, while some upstream
+    # world-landmark sources use positive Y upward. Compare hips and feet so the
+    # exported result is consistently Y-up either way.
+    return 1.0 if float(np.nanmedian(foot_y) - np.nanmedian(hip_y)) >= 0.0 else -1.0
+
+
+def _framewise_foot_speed(foot_data: np.ndarray, time: np.ndarray) -> np.ndarray:
+    n_frames, n_feet = foot_data.shape[:2]
+    speed = np.full((n_frames, n_feet), np.nan, dtype=float)
+    if n_frames < 2:
+        return speed
+
+    dt = np.diff(np.asarray(time, dtype=float))
+    dt[~np.isfinite(dt) | (dt <= 0.0)] = np.nan
+    delta = np.linalg.norm(np.diff(foot_data, axis=0), axis=2)
+    interval_speed = delta / dt[:, None]
+    interval_speed[~np.isfinite(interval_speed)] = np.nan
+
+    speed[0] = interval_speed[0]
+    speed[-1] = interval_speed[-1]
+    if n_frames > 2:
+        speed[1:-1] = np.nanmin(
+            np.stack([interval_speed[:-1], interval_speed[1:]], axis=0),
+            axis=0,
+        )
+    return speed
+
+
+def _trim_upper_outliers(values: np.ndarray, *, min_samples: int) -> np.ndarray:
+    values = np.asarray(values, dtype=float)
+    values = values[np.isfinite(values)]
+    if values.size < max(8, min_samples):
+        return values
+    q1, q3 = np.nanpercentile(values, [25.0, 75.0])
+    iqr = q3 - q1
+    if not np.isfinite(iqr) or iqr <= 0.0:
+        return values
+    trimmed = values[values <= q3 + 1.5 * iqr]
+    return trimmed if trimmed.size >= min_samples else values
+
+
+def _estimate_floor_y(
+    data: np.ndarray,
+    landmark_names: list[str],
+    confidence: np.ndarray | None,
+    time: np.ndarray,
+    config: Pose3DGlobalConfig,
+) -> tuple[float, float, dict]:
+    method = str(getattr(config, "floor_method", "auto") or "auto")
+    y_direction = _infer_raw_y_direction(data, landmark_names)
+    direction_name = "down" if y_direction > 0.0 else "up"
+    metadata: dict = {
+        "floor_method_requested": method,
+        "input_y_direction": direction_name,
+    }
+
+    if method == "none":
+        metadata.update(
+            {
+                "floor_method": "none",
+                "floor_contact_samples": 0,
+                "floor_contact_frames": 0,
+            }
+        )
+        return 0.0, y_direction, metadata
+
+    foot_indices, foot_names = _indices_for_names(landmark_names, FOOT_MARKERS)
+    finite_y = data[:, :, 1][np.isfinite(data[:, :, 1])]
+    if not foot_indices:
+        floor_score = float(np.nanmax(y_direction * finite_y)) if len(finite_y) else 0.0
+        metadata.update(
+            {
+                "floor_method": "finite_y_fallback",
+                "floor_contact_samples": 0,
+                "floor_contact_frames": 0,
+                "floor_marker_names": [],
+            }
+        )
+        return y_direction * floor_score, y_direction, metadata
+
+    foot_data = np.asarray(data[:, foot_indices, :], dtype=float)
+    foot_score = y_direction * foot_data[:, :, 1]
+    valid = np.isfinite(foot_data).all(axis=2) & np.isfinite(foot_score)
+    if confidence is not None:
+        foot_conf = np.asarray(confidence[:, foot_indices], dtype=float)
+        valid &= (
+            np.nan_to_num(foot_conf, nan=0.0)
+            >= float(getattr(config, "floor_confidence_threshold", 0.0))
+        )
+
+    scores = foot_score[valid]
+    if scores.size == 0:
+        floor_score = float(np.nanmax(y_direction * finite_y)) if len(finite_y) else 0.0
+        metadata.update(
+            {
+                "floor_method": "finite_y_fallback",
+                "floor_contact_samples": 0,
+                "floor_contact_frames": 0,
+                "floor_marker_names": foot_names,
+            }
+        )
+        return y_direction * floor_score, y_direction, metadata
+
+    floor_percentile = _percentile(getattr(config, "floor_percentile", None), default=90.0)
+
+    if method == "feet_median":
+        floor_score = float(np.nanmedian(scores))
+        metadata.update(
+            {
+                "floor_method": "feet_median",
+                "floor_contact_samples": int(scores.size),
+                "floor_contact_frames": int(np.any(valid, axis=1).sum()),
+                "floor_marker_names": foot_names,
+            }
+        )
+        return y_direction * floor_score, y_direction, metadata
+
+    if method == "min_y":
+        floor_score = float(np.nanmax(scores))
+        metadata.update(
+            {
+                "floor_method": "min_y",
+                "floor_contact_samples": int(scores.size),
+                "floor_contact_frames": int(np.any(valid, axis=1).sum()),
+                "floor_marker_names": foot_names,
+            }
+        )
+        return y_direction * floor_score, y_direction, metadata
+
+    speed = _framewise_foot_speed(foot_data, time)
+    speed_values = speed[valid & np.isfinite(speed)]
+    min_samples = max(1, int(getattr(config, "floor_min_contact_samples", 6)))
+    velocity_threshold = None
+    contact = valid.copy()
+
+    if speed_values.size >= min_samples:
+        velocity_percentile = _percentile(
+            getattr(config, "floor_contact_velocity_percentile", None),
+            default=35.0,
+        )
+        velocity_threshold = float(np.nanpercentile(speed_values, velocity_percentile))
+        contact = valid & np.isfinite(speed) & (speed <= velocity_threshold)
+
+    if int(contact.sum()) >= min_samples:
+        contact_scores = foot_score[contact]
+        height_percentile = _percentile(
+            getattr(config, "floor_contact_height_percentile", None),
+            default=35.0,
+        )
+        height_threshold = float(np.nanpercentile(contact_scores, height_percentile))
+        support_contact = contact & (foot_score >= height_threshold)
+        if int(support_contact.sum()) >= min_samples:
+            contact = support_contact
+    else:
+        contact = np.zeros_like(valid, dtype=bool)
+
+    if int(contact.sum()) >= min_samples:
+        contact_scores = _trim_upper_outliers(foot_score[contact], min_samples=min_samples)
+        floor_score = float(np.nanpercentile(contact_scores, floor_percentile))
+        resolved_method = "foot_contact"
+    else:
+        contact_scores = _trim_upper_outliers(scores, min_samples=min_samples)
+        floor_score = float(np.nanpercentile(contact_scores, floor_percentile))
+        resolved_method = "feet_percentile_fallback"
+        contact = valid
+
+    metadata.update(
+        {
+            "floor_method": resolved_method,
+            "floor_contact_samples": int(contact.sum()),
+            "floor_contact_frames": int(np.any(contact, axis=1).sum()),
+            "floor_marker_names": foot_names,
+            "floor_percentile": floor_percentile,
+            "floor_velocity_threshold_m_per_s": velocity_threshold,
+        }
+    )
+    return y_direction * floor_score, y_direction, metadata
+
+
 def estimate_global_pose(
     pose3d_world: Pose3DWorldResult,
     pose2d: Pose2DResult | None = None,
@@ -321,19 +540,17 @@ def estimate_global_pose(
         if np.any(valid_root):
             data[valid_root] = data[valid_root] - root[valid_root, None, :]
 
-    foot_indices = [NAME_TO_INDEX[name] for name in FOOT_MARKERS if name in NAME_TO_INDEX]
-    foot_y = data[:, foot_indices, 1].reshape(-1)
-    foot_y = foot_y[np.isfinite(foot_y)]
-
-    if len(foot_y):
-        floor_y = float(np.nanmedian(foot_y))
-    else:
-        finite_y = data[:, :, 1][np.isfinite(data[:, :, 1])]
-        floor_y = float(np.nanmin(finite_y)) if len(finite_y) else 0.0
+    floor_y, y_direction, floor_metadata = _estimate_floor_y(
+        data,
+        pose3d_world.landmark_names,
+        pose3d_world.confidence,
+        pose3d_world.time,
+        config,
+    )
 
     global_data = np.empty_like(data)
     global_data[:, :, 0] = data[:, :, 0]
-    global_data[:, :, 1] = floor_y - data[:, :, 1]
+    global_data[:, :, 1] = y_direction * (floor_y - data[:, :, 1])
     global_data[:, :, 2] = data[:, :, 2]
 
     result = Pose3DGlobalResult(
@@ -345,9 +562,10 @@ def estimate_global_pose(
         confidence=None if pose3d_world.confidence is None else pose3d_world.confidence.copy(),
         metadata={
             **(pose3d_world.metadata or {}),
-            "floor_method": getattr(config, "floor_method", "median_foot_y"),
+            **floor_metadata,
             "translation_method": translation_method,
             "floor_y": floor_y,
+            "floored": floor_metadata.get("floor_method") != "none",
         },
         source=pose3d_world.source,
         fps=pose3d_world.fps,

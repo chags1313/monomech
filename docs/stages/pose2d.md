@@ -2,6 +2,8 @@
 
 The usual entry point is `mm.estimate_pose()`. It estimates image-space 2D landmarks, keeps that result in the returned pose metadata, and uses it to build the global 3D pose.
 
+![2D pose overlay](../assets/images/stage-01-2d-pose-overlay.png)
+
 ```python
 import monomech as mm
 

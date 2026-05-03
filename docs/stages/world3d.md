@@ -18,8 +18,19 @@ pose = mm.estimate_pose(
 | --- | --- |
 | `root_centered=False` | You want camera-positioned motion for OpenSim and review. |
 | `root_centered=True` | You want motion centered around the pelvis. |
-| `floored=True` | You want the lowest foot contact placed at ground height. |
-| `floored=False` | You want to preserve the raw reconstructed height. |
+| `floored=True` | You want contact-aware floor alignment for OpenSim and force estimation. |
+| `floored=False` | You want Y-up data without applying the static floor shift. |
+
+![Root-centered 3D pose](../assets/images/stage-02-root-centered-3d-pose.png)
+
+`floored=True` uses `Pose3DGlobalConfig(floor_method="auto")`, which looks for slow-moving support-foot samples and estimates the floor from those contacts. This is more stable than using every foot point because swing-foot and low-confidence detections are less likely to define the ground.
+
+```python
+pose = mm.estimate_pose("data/subject01.mp4", floored=True)
+
+print(pose.metadata["floor_method"])
+print(pose.metadata["floor_contact_frames"])
+```
 
 ## Preview
 
@@ -28,6 +39,8 @@ pose.vis_3d(frame=120)
 ```
 
 The 3D preview uses a white background, black landmarks and segments, a mid-hip to mid-shoulder trunk connection, and a Y-up view so the plot matches OpenSim conventions.
+
+![Global 3D pose after PnP](../assets/images/stage-03-pnp-global-3d-pose.png)
 
 ## Clean And Export
 

@@ -52,7 +52,17 @@ pose = mm.estimate_pose(
 )
 ```
 
-Use `root_centered=True` when you want pose motion centered around the pelvis instead of camera-positioned global motion. Use `floored=True` for OpenSim-friendly ground contact.
+Use `root_centered=True` when you want pose motion centered around the pelvis instead of camera-positioned global motion. Use `floored=True` for contact-aware floor alignment and OpenSim-friendly ground contact.
+
+Floor diagnostics are stored in metadata:
+
+```python
+pose = mm.estimate_pose("data/squat.mp4", floored=True)
+
+print(pose.metadata["floor_method"])
+print(pose.metadata["floor_contact_frames"])
+print(pose.metadata["floor_contact_samples"])
+```
 
 ### `smooth(data, *, method="butterworth", cutoff_hz=6.0, order=4, window_length=11, polyorder=3, preserve_segment_lengths=False)`
 
@@ -132,7 +142,7 @@ scaled_model = mm.run_scaling(
 
 `model` can be a built-in name such as `"pose"` or `"mocap"`, or a path to a custom `.osim` file.
 
-### `run_ik(scaled_model=None, *, markers=None, model=None, output_dir="outputs/ik", config=None)`
+### `run_ik(scaled_model=None, *, markers=None, model=None, output_dir="outputs/ik", backend=None, marker_weights=None, coordinate_weights=None, coordinate_values=None, config=None)`
 
 Run inverse kinematics.
 
@@ -140,6 +150,22 @@ Returns: `StorageResult`
 
 ```python
 ik = mm.run_ik(scaled_model, output_dir="outputs/subject01/ik")
+```
+
+Use marker and coordinate weights to guide difficult video trials. For example, a mild pelvis-tilt regularizer can keep the pelvis from tipping forward when hip or trunk landmarks are noisy:
+
+```python
+ik = mm.run_ik(
+    scaled_model,
+    marker_weights={
+        "left_hip": 3.0,
+        "right_hip": 3.0,
+        "left_shoulder": 2.0,
+        "right_shoulder": 2.0,
+    },
+    coordinate_weights={"pelvis_tilt": 8.0},
+    coordinate_values={"pelvis_tilt": 0.0},
+)
 ```
 
 You can also pass explicit markers and a model:
@@ -343,10 +369,27 @@ Pass config objects when you need reproducible settings beyond the short functio
 | `GapFillConfig` | gap-fill workflows. |
 
 ```python
-from monomech import OpenSimIKConfig
+import monomech as mm
+from monomech import OpenSimIKConfig, Pose3DGlobalConfig
+
+pose = mm.estimate_pose(
+    "data/squat.mp4",
+    global_config=Pose3DGlobalConfig(
+        translation_method="pnp",
+        floor_method="foot_contact",
+        floor_percentile=90.0,
+    ),
+)
 
 ik = mm.run_ik(
     scaled_model,
-    config=OpenSimIKConfig(accuracy=1e-5, sanitize_marker_data=True),
+    config=OpenSimIKConfig(
+        accuracy=1e-5,
+        sanitize_marker_data=True,
+        coordinate_weights={"pelvis_tilt": 8.0},
+        coordinate_values={"pelvis_tilt": 0.0},
+    ),
 )
 ```
+
+`Pose3DGlobalConfig.floor_method` accepts `auto`, `foot_contact`, `feet_median`, `min_y`, and `none`. The default `auto` method estimates the floor from slow-moving support-foot markers and falls back to a robust foot-height percentile when contact evidence is limited.

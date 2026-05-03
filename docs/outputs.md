@@ -2,6 +2,8 @@
 
 `monomech` result objects are designed to be inspectable in notebooks and useful in downstream tools.
 
+![Table output preview](assets/images/table-output-preview.png)
+
 ## Common Result Methods
 
 Most pose and marker results provide:
@@ -70,6 +72,14 @@ outputs/
 ```
 
 Exact names depend on the source trial and OpenSim stage configuration.
+
+The OpenSim tables are ordinary time series. IK produces coordinate trajectories, external-load files contain force and point signals, and ID produces force and moment traces.
+
+![IK coordinate signals](assets/images/stage-04-ik-coordinate-signals.png)
+
+![Estimated external-load signals](assets/images/stage-05-estimated-force-signals.png)
+
+![Inverse-dynamics output signals](assets/images/stage-06-id-output-signals.png)
 
 ## Recommended Layout
 

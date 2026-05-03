@@ -4,7 +4,13 @@ import numpy as np
 import pandas as pd
 
 import monomech as mm
-from monomech.results import OpenSimScaleResult, Pose3DGlobalResult, StorageResult
+from monomech.pose import estimate_global_pose
+from monomech.results import (
+    OpenSimScaleResult,
+    Pose3DGlobalResult,
+    Pose3DWorldResult,
+    StorageResult,
+)
 
 
 def _pose_with_gap() -> Pose3DGlobalResult:
@@ -74,6 +80,57 @@ def test_pose_preview_can_overlay_source_image():
     plt.close("all")
 
 
+def test_global_pose_uses_contact_floor_instead_of_swinging_foot_outlier():
+    names = [
+        "left_hip",
+        "right_hip",
+        "left_ankle",
+        "right_ankle",
+        "left_heel",
+        "right_heel",
+        "left_foot_index",
+        "right_foot_index",
+    ]
+    data = np.zeros((12, len(names), 3), dtype=float)
+    time = np.arange(12, dtype=float) / 30.0
+
+    hip_indices = [names.index("left_hip"), names.index("right_hip")]
+    left_foot = [names.index("left_ankle"), names.index("left_heel"), names.index("left_foot_index")]
+    right_foot = [
+        names.index("right_ankle"),
+        names.index("right_heel"),
+        names.index("right_foot_index"),
+    ]
+    data[:, hip_indices, 1] = 0.0
+    data[:, left_foot, 1] = 1.0
+    data[:, right_foot, 1] = 1.8
+    data[:, right_foot, 0] = np.arange(12, dtype=float)[:, None] * 0.25
+
+    world = Pose3DWorldResult(
+        name="synthetic_world",
+        data=data,
+        time=time,
+        landmark_names=names,
+        dims=("x_m", "y_m", "z_m"),
+        confidence=np.ones((12, len(names)), dtype=float),
+        fps=30.0,
+    )
+
+    pose = estimate_global_pose(
+        world,
+        config=mm.Pose3DGlobalConfig(
+            translation_method="pnp",
+            smooth_root=False,
+            floor_method="auto",
+        ),
+    )
+
+    assert pose.metadata["floor_method"] == "foot_contact"
+    assert pose.metadata["floor_contact_frames"] == 12
+    assert 0.95 <= pose.metadata["floor_y"] <= 1.05
+    assert np.nanmedian(pose.data[:, left_foot, 1]) == 0.0
+
+
 def test_load_and_external_forces_helpers_are_concise():
     dumbbell = mm.load(type="carried", body="hand_r", mass_kg=10.0)
     forces = mm.external_forces(loads=[dumbbell], include_estimated_grf=True)
@@ -138,3 +195,40 @@ def test_run_ik_accepts_backend_parameter(monkeypatch, tmp_path):
     mm.run_ik(scaled, output_dir=tmp_path / "ik", backend="fast")
 
     assert captured["backend"] == "fast"
+
+
+def test_run_ik_accepts_task_weights(monkeypatch, tmp_path):
+    trc_path = tmp_path / "trial.trc"
+    trc_path.write_text("placeholder", encoding="utf-8")
+    model_path = tmp_path / "scaled.osim"
+    model_path.write_text("<OpenSimDocument />", encoding="utf-8")
+    captured = {}
+
+    scaled = OpenSimScaleResult(
+        scaled_model_path=model_path,
+        metadata={"trc_path": str(trc_path)},
+    )
+
+    def fake_run_ik(*, trc_path, model_path, output_dir, config=None):
+        captured["marker_weights"] = config.marker_weights
+        captured["coordinate_weights"] = config.coordinate_weights
+        captured["coordinate_values"] = config.coordinate_values
+        return StorageResult(
+            path=Path(output_dir) / "trial_ik.mot",
+            dataframe=pd.DataFrame({"time": [0.0, 1.0], "hip_flexion": [0.0, 1.0]}),
+            metadata={"trc_path": str(trc_path), "model_path": str(model_path)},
+        )
+
+    monkeypatch.setattr("monomech.api._opensim_run_ik", fake_run_ik)
+
+    mm.run_ik(
+        scaled,
+        output_dir=tmp_path / "ik",
+        marker_weights={"left_hip": 3.0, "right_hip": 3.0},
+        coordinate_weights={"pelvis_tilt": 8.0},
+        coordinate_values={"pelvis_tilt": 0.0},
+    )
+
+    assert captured["marker_weights"] == {"left_hip": 3.0, "right_hip": 3.0}
+    assert captured["coordinate_weights"] == {"pelvis_tilt": 8.0}
+    assert captured["coordinate_values"] == {"pelvis_tilt": 0.0}

@@ -54,6 +54,8 @@ Single-camera biomechanics that stays inspectable from the first video frame to 
 
 ## End-To-End Map
 
+![Pipeline overview](assets/images/pipeline-overview.png)
+
 ```mermaid
 flowchart LR
   A["Video or TRC"] --> B["Pose / marker data"]
@@ -67,6 +69,58 @@ flowchart LR
   E --> J["Fast viewer or animated GLB"]
   H --> J
 ```
+
+## What The Stages Look Like
+
+These are direct outputs from the package plotting helpers, estimated-load tables, and exported Three.js viewer.
+
+<div class="grid cards" markdown>
+
+-   **2D pose overlay**
+
+    ![2D pose overlay](assets/images/stage-01-2d-pose-overlay.png)
+
+    Check the detected body landmarks directly on the source frame.
+
+-   **Root-centered 3D**
+
+    ![Root-centered 3D pose](assets/images/stage-02-root-centered-3d-pose.png)
+
+    Inspect body shape and relative motion before camera placement.
+
+-   **PnP global pose**
+
+    ![Global 3D pose after PnP](assets/images/stage-03-pnp-global-3d-pose.png)
+
+    Review a Y-up, floor-aligned 3D pose before exporting to OpenSim.
+
+-   **Key IK angles**
+
+    ![IK coordinate signals](assets/images/stage-04-ik-coordinate-signals.png)
+
+    Review the hip, knee, and ankle angles that usually get checked first.
+
+-   **Estimated forces**
+
+    ![Estimated force signals](assets/images/stage-05-estimated-force-signals.png)
+
+    Inspect vertical support and center-of-pressure placement.
+
+-   **Key ID kinetics**
+
+    ![Inverse-dynamics signals](assets/images/stage-06-id-output-signals.png)
+
+    Check the main hip, knee, and ankle moment traces.
+
+-   **GLB skeletal viewer**
+
+    ![GLB skeletal animation viewer](assets/images/stage-07-animation-viewer-showcase.png)
+
+    Open the exported skeletal mesh animation in the same viewer used on the docs site.
+
+</div>
+
+[:octicons-arrow-right-24: See the full visual pipeline tour](pipeline-tour.md)
 
 ## Install
 
@@ -123,6 +177,15 @@ pose.to_csv(output_dir / "subject01_pose.csv")
 trc_path = pose.to_trc(output_dir / "subject01.trc")
 print(trc_path)
 ```
+
+`floored=True` uses contact-aware floor alignment by default. The result metadata records the support frames used by the estimator:
+
+```python
+print(pose.metadata["floor_method"])
+print(pose.metadata["floor_contact_frames"])
+```
+
+![Video pose overlay](assets/images/stage-01-2d-pose-overlay.png)
 
 ## First OpenSim Run
 

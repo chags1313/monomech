@@ -1461,7 +1461,7 @@ def create_glb_viewer(
     glb_path: str | Path | None = None,
     html_path: str | Path | None = None,
     *,
-    title: str = "monomech IK and ID visualizer",
+    title: str = "monomech GLB viewer",
     embed_glb: bool = False,
 ) -> OpenSimVisualizerResult:
     """Create the production monomech GLB viewer.
@@ -1492,7 +1492,7 @@ def create_glb_viewer(
             "html_path": str(html_path),
             "glb_path": None if glb is None else str(glb),
             "embedded_glb": bool(embed_glb and glb is not None),
-            "viewer_kind": "glb",
+            "viewer_kind": "visualizer",
         },
     )
 
@@ -1501,7 +1501,7 @@ def glb_viewer(
     glb_path: str | Path | None = None,
     html_path: str | Path | None = None,
     *,
-    title: str = "monomech IK and ID visualizer",
+    title: str = "monomech GLB viewer",
     embed_glb: bool = False,
 ) -> OpenSimVisualizerResult:
     """One-line GLB viewer helper.
@@ -1579,7 +1579,7 @@ def _write_simple_glb_viewer_html(html_path: Path, *, title: str, payload: dict[
   <div class="bar">
     <div class="title">__TITLE__</div>
     <div class="tools">
-      <button id="play">Pause</button>
+      <button id="play">Play</button>
       <select id="speed" title="Playback speed">
         <option value="0.5">0.5x</option>
         <option value="1" selected>1x</option>
@@ -1624,9 +1624,10 @@ def _write_simple_glb_viewer_html(html_path: Path, *, title: str, payload: dict[
 
     const loader = new GLTFLoader();
     const clock = new THREE.Clock();
-    let root = null, mixer = null, duration = 0, playing = true;
+    let root = null, mixer = null, duration = 0, playing = false;
     const status = document.getElementById('status');
     const speed = document.getElementById('speed');
+    const playButton = document.getElementById('play');
 
     function disposeObject(obj) {
       obj.traverse((child) => {
@@ -1637,17 +1638,29 @@ def _write_simple_glb_viewer_html(html_path: Path, *, title: str, payload: dict[
         }
       });
     }
+    let cameraFollowOffset = null;
     function frameObject(obj) {
       const box = new THREE.Box3().setFromObject(obj);
       if (!Number.isFinite(box.min.x) || box.isEmpty()) return;
       const center = box.getCenter(new THREE.Vector3());
       const size = box.getSize(new THREE.Vector3());
-      const radius = Math.max(size.x, size.y, size.z, 1e-3);
+      const radius = Math.max(size.x, size.y, size.z, 1e-3) * 1.15;
       controls.target.copy(center);
       camera.position.set(center.x + radius * 1.5, center.y + radius * 0.8, center.z + radius * 2.0);
       camera.near = Math.max(radius / 1000, 0.001);
       camera.far = Math.max(radius * 20, 10);
       camera.updateProjectionMatrix();
+      cameraFollowOffset = camera.position.clone().sub(controls.target);
+    }
+    function followObject(obj) {
+      if (!obj || !cameraFollowOffset) return;
+      const box = new THREE.Box3().setFromObject(obj);
+      if (!Number.isFinite(box.min.x) || box.isEmpty()) return;
+      const center = box.getCenter(new THREE.Vector3());
+      const currentOffset = camera.position.clone().sub(controls.target);
+      if (currentOffset.lengthSq() > 1e-9) cameraFollowOffset.copy(currentOffset);
+      controls.target.copy(center);
+      camera.position.copy(center).add(cameraFollowOffset);
     }
     function loadGlb(url) {
       status.textContent = 'Loading model...';
@@ -1667,8 +1680,12 @@ def _write_simple_glb_viewer_html(html_path: Path, *, title: str, payload: dict[
           const action = mixer.clipAction(gltf.animations[0]);
           action.play();
           duration = gltf.animations[0].duration || 0;
+          mixer.setTime(0);
+          playing = false;
+          playButton.textContent = 'Play';
         }
         frameObject(root);
+        followObject(root);
         status.textContent = mixer ? `Animation: ${duration.toFixed(2)} s` : 'Model loaded';
       }, undefined, (error) => {
         console.error(error);
@@ -1676,16 +1693,37 @@ def _write_simple_glb_viewer_html(html_path: Path, *, title: str, payload: dict[
       });
     }
     if (data.glb_path) loadGlb(data.glb_path);
+    else status.textContent = 'Upload GLB';
 
     document.getElementById('glbUpload').addEventListener('change', (event) => {
       const file = event.target.files?.[0];
       if (!file) return;
       loadGlb(URL.createObjectURL(file));
     });
-    document.getElementById('play').addEventListener('click', (event) => {
+    playButton.addEventListener('click', (event) => {
       playing = !playing;
       event.currentTarget.textContent = playing ? 'Pause' : 'Play';
     });
+    window.monomechViewer = {
+      loadGlb,
+      setTime(seconds) {
+        if (!mixer || !duration) return;
+        playing = false;
+        playButton.textContent = 'Play';
+        mixer.setTime(Math.max(0, Math.min(duration, Number(seconds) || 0)));
+        followObject(root);
+        controls.update();
+        renderer.render(scene, camera);
+      },
+      play() { playing = true; playButton.textContent = 'Pause'; },
+      pause() { playing = false; playButton.textContent = 'Play'; },
+      frame() {
+        if (root) {
+          frameObject(root);
+          renderer.render(scene, camera);
+        }
+      },
+    };
     addEventListener('resize', () => {
       camera.aspect = innerWidth / innerHeight;
       camera.updateProjectionMatrix();
@@ -1695,6 +1733,7 @@ def _write_simple_glb_viewer_html(html_path: Path, *, title: str, payload: dict[
       requestAnimationFrame(animate);
       const dt = clock.getDelta() * Number(speed.value || 1);
       if (playing && mixer) mixer.update(dt);
+      followObject(root);
       controls.update();
       renderer.render(scene, camera);
     }
@@ -2432,7 +2471,7 @@ def _write_visualizer_html(
         <canvas id="threeScene"></canvas>
         <div class="legend">
           <span class="pill">teal: markers</span>
-          <span class="pill">gray: body proxies</span>
+          <span class="pill" id="modelLegend">gray: body proxies</span>
           <span class="pill">dark lines: marker skeleton</span>
           <span class="pill">orange: external forces</span>
         </div>
@@ -2491,6 +2530,10 @@ def _write_visualizer_html(
     const speedSelect = document.getElementById('speed');
     const status = document.getElementById('viewerStatus');
     const notice = document.getElementById('viewerNotice');
+    if (data.glb_path) {
+      notice.textContent = 'Inspect synchronized anatomical model motion, markers, external forces, IK, and inverse dynamics.';
+      document.getElementById('modelLegend').textContent = 'gray: skeletal model';
+    }
     let idx = 0, playing = false, lastTick = 0;
     let timelineFrames = Math.max(1, marker.frames.length);
     scrub.max = Math.max(0, marker.frames.length - 1);
@@ -2499,9 +2542,10 @@ def _write_visualizer_html(
     }
 
     function refreshStats() {
+      const hasGlbModel = Boolean(data.glb_path);
       document.getElementById('stats').innerHTML = [
         ['Frames', marker.frames.length],
-        ['Bodies', body.names?.length || 0],
+        [hasGlbModel ? 'GLB model' : 'Body proxies', hasGlbModel ? 'Loaded' : (body.names?.length || 0)],
         ['Markers', marker.names.length],
         ['Forces', (force.names || []).length],
         ['IK traces', data.ik?.columns?.length || 0],
@@ -2659,6 +2703,7 @@ def _write_visualizer_html(
       updateForces(idx);
       scrub.value = idx;
       setMixerToFrame(idx);
+      followGlbModel();
       const shownTime = marker.time.length
         ? (marker.time[idx] || 0)
         : (glbDuration && timelineFrames > 1 ? (idx / (timelineFrames - 1)) * glbDuration : 0);
@@ -2670,10 +2715,12 @@ def _write_visualizer_html(
       camera.aspect = rect.width / rect.height;
       camera.updateProjectionMatrix();
     }
+    let cameraFollowOffset = null;
     function frameScene() {
       const box = new THREE.Box3();
       let hasBox = false;
-      for (const group of [modelGroup, markersGroup, skeletonGroup]) {
+      const frameTargets = glbRoot ? [glbRoot] : [modelGroup, markersGroup, skeletonGroup];
+      for (const group of frameTargets) {
         const b = new THREE.Box3().setFromObject(group);
         if (Number.isFinite(b.min.x) && !b.isEmpty()) {
           if (!hasBox) box.copy(b); else box.union(b);
@@ -2683,12 +2730,25 @@ def _write_visualizer_html(
       if (!hasBox) return;
       const center = box.getCenter(new THREE.Vector3());
       const size = box.getSize(new THREE.Vector3());
-      const radius = Math.max(size.x, size.y, size.z, 0.5);
+      const extent = Math.max(size.x, size.y, size.z, 0.5);
+      const radius = extent * 1.12;
       controls.target.copy(center);
       camera.position.set(center.x + radius * 1.35, center.y + radius * 0.75, center.z + radius * 2.0);
       camera.near = Math.max(radius / 1000, 0.001);
       camera.far = Math.max(radius * 30, 10);
       camera.updateProjectionMatrix();
+      cameraFollowOffset = camera.position.clone().sub(controls.target);
+    }
+    function followGlbModel() {
+      if (!glbRoot || !cameraFollowOffset) return;
+      const box = new THREE.Box3().setFromObject(glbRoot);
+      if (!Number.isFinite(box.min.x) || box.isEmpty()) return;
+      const center = box.getCenter(new THREE.Vector3());
+      const currentOffset = camera.position.clone().sub(controls.target);
+      if (currentOffset.lengthSq() > 1e-9) cameraFollowOffset.copy(currentOffset);
+      controls.target.copy(center);
+      camera.position.copy(center).add(cameraFollowOffset);
+      controls.update();
     }
 
     const loader = new GLTFLoader();

@@ -22,6 +22,8 @@ When you pass `external_forces=...` to `mm.run_id()`, `monomech` writes both fil
 
 Those paths are saved in `id_result.metadata`.
 
+![Estimated external-load signals](../assets/images/stage-05-estimated-force-signals.png)
+
 ## Choose A Load Source
 
 <div class="grid cards" markdown>
@@ -40,7 +42,7 @@ Those paths are saved in `id_result.metadata`.
 
 -   **No force plates**
 
-    Use `estimate_grf()` for demos, smoke tests, and rough exploratory workflows.
+    Use `estimate_grf()` for pipeline checks, sensitivity analyses, and rough exploratory workflows.
 
 </div>
 

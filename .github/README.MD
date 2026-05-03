@@ -2,6 +2,8 @@
 
 **MonoMech** is a Python library for **monocular biomechanics** and **marker-based biomechanics**.
 
+![MonoMech Visualizer](https://github.com/chags1313/monomech/blob/main/docs/assets/images/animation-viewer-showcase.png)
+
 It is designed for researchers, clinicians, and biomechanists who want a practical workflow that goes from:
 
 - **video → 2D pose → 3D pose → TRC → OpenSim scale / IK / ID**

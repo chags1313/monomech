@@ -4,6 +4,8 @@ Use the browser visualizer to inspect a monomech `.glb` animation without instal
 
 [Open the GLB visualizer](assets/visualizer.html){ .md-button .md-button--primary }
 
+![GLB skeletal viewer preview](assets/images/stage-07-animation-viewer-showcase.png)
+
 The same viewer is available from Python:
 
 ```python
@@ -26,8 +28,8 @@ viewer.show(inline_glb=True)
 ## What It Shows
 
 - animated OpenSim mesh playback from a monomech-exported GLB
-- playback controls, timeline scrubbing, orbit controls, and model visibility controls
-- marker, force, IK, and ID panels when those data are embedded in an exported monomech dashboard
+- upload-first browser use, so the docs page starts empty
+- playback speed, play/pause controls, and orbit controls
 
 For a full exported dashboard with synchronized markers, external forces, IK plots, and ID plots, create it from Python:
 

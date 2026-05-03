@@ -2,6 +2,8 @@
 
 This guide takes you from a fresh environment to useful files. Run the sections in order the first time, then jump to the stage pages when you need deeper control.
 
+![Pipeline overview](assets/images/pipeline-overview.png)
+
 ## 1. Create An Environment
 
 Use Python 3.10, 3.11, or 3.12.
@@ -80,9 +82,14 @@ pose = mm.smooth(pose, cutoff_hz=6.0)
 pose = mm.gap_fill(pose, max_gap_frames=12)
 
 display(pose.summary().head())
+print(pose.metadata["floor_method"], pose.metadata["floor_contact_frames"])
 pose.vis_2d(frame=50)  # overlays the 2D skeleton on the source frame when available
 pose.vis_3d(frame=50)
 ```
+
+With `floored=True`, `monomech` estimates a static floor from likely foot-contact samples. The result is Y-up and OpenSim-friendly, and the metadata tells you how many support frames were used.
+
+![Video pose overlay](assets/images/stage-01-2d-pose-overlay.png)
 
 Export the global pose:
 
@@ -90,6 +97,8 @@ Export the global pose:
 pose.to_csv(output_dir / "subject01_global.csv")
 trc_path = pose.to_trc(output_dir / "subject01_global.trc")
 ```
+
+![Global pose after PnP and floor alignment](assets/images/stage-03-pnp-global-3d-pose.png)
 
 ## Marker-First Workflow
 
@@ -138,6 +147,8 @@ print(ik.metadata["marker_error_summary"])
 print(ik.metadata["preflight"])
 ```
 
+![IK coordinate signals](assets/images/stage-04-ik-coordinate-signals.png)
+
 Add external loads for inverse dynamics:
 
 ```python
@@ -151,6 +162,10 @@ id_result = mm.run_id(
 
 print(id_result.path)
 ```
+
+![Estimated external-load signals](assets/images/stage-05-estimated-force-signals.png)
+
+![Inverse-dynamics output signals](assets/images/stage-06-id-output-signals.png)
 
 Create the notebook visualizer:
 

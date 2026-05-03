@@ -71,6 +71,7 @@ nav:
   - Home: index.md
   - Online visualizer: visualizer.md
   - Getting started: getting-started.md
+  - Pipeline tour: pipeline-tour.md
   - Examples: examples.md
   - API reference: api.md
   - Modular stages:

@@ -9,16 +9,66 @@
 
 Full documentation: [chags1313.github.io/monomech](https://chags1313.github.io/monomech/)
 
+![monomech pipeline overview](docs/assets/images/pipeline-overview.png)
+
 ## Why Use It
 
 - Start from a normal video or an existing TRC file.
 - Export readable CSV and OpenSim-compatible TRC files.
 - Run pose estimation, marker cleanup, scaling, inverse kinematics, and inverse dynamics as separate inspectable steps.
+- Align video pose to a contact-aware floor estimate before TRC export.
 - Create OpenSim external loads from measured force data, arrays, carried loads, or estimated ground reaction forces.
 - Export IK-driven OpenSim animations to a single portable GLB file.
 - Review GLB meshes, markers, external-force arrows, IK traces, and ID traces in a Three.js HTML viewer.
 - Keep OpenSim preflight checks on by default so NaNs and isolated gaps are fixed before IK and ID runs.
 - Import the base package without installing heavy optional video or OpenSim dependencies.
+
+## What You Get
+
+| Stage | Output |
+| --- | --- |
+| Video pose | 2D overlay previews, global 3D landmark data, CSV, and TRC. |
+| Cleaning | Smoothed and gap-filled pose or marker trajectories. |
+| OpenSim scale and IK | Scaled `.osim` model, IK setup files, coordinate `.mot`, and marker-error summaries. |
+| External loads | OpenSim `ExternalLoads.xml` plus synchronized load `.mot` files. |
+| Inverse dynamics | Joint force and moment `.sto` tables. |
+| Visualization | Notebook-ready HTML viewer and optional GLB animation. |
+
+![monomech synchronized viewer preview](docs/assets/images/stage-07-animation-viewer-showcase.png)
+
+## Visual Workflow
+
+These screenshots are produced by the package APIs on a real video run: `pose.vis_2d()`, `pose.vis_3d()`, `ik.plot()`, `mm.estimate_grf(...)`, `id_result.plot()`, and the exported Three.js viewer.
+
+### 1. 2D landmarks on the source image
+
+![2D landmarks over video](docs/assets/images/stage-01-2d-pose-overlay.png)
+
+### 2. Root-centered 3D pose
+
+![Root-centered 3D pose](docs/assets/images/stage-02-root-centered-3d-pose.png)
+
+### 3. Global 3D pose after PnP and floor alignment
+
+![Global 3D pose after PnP](docs/assets/images/stage-03-pnp-global-3d-pose.png)
+
+### 4. IK, estimated force, and ID signals
+
+Hip, knee, and ankle IK coordinates:
+
+![IK coordinate signals](docs/assets/images/stage-04-ik-coordinate-signals.png)
+
+Estimated ground-reaction force and application-point signals:
+
+![Estimated force signals](docs/assets/images/stage-05-estimated-force-signals.png)
+
+Hip, knee, and ankle inverse-dynamics moments:
+
+![Inverse-dynamics output signals](docs/assets/images/stage-06-id-output-signals.png)
+
+### 5. GLB skeletal animation viewer
+
+![GLB skeletal animation viewer](docs/assets/images/stage-07-animation-viewer-showcase.png)
 
 ## Install
 
@@ -51,9 +101,14 @@ output_dir.mkdir(parents=True, exist_ok=True)
 pose3d_global = mm.estimate_pose(video_path, root_centered=False, floored=True)
 pose3d_global = mm.gap_fill(mm.smooth(pose3d_global))
 
+print(pose3d_global.metadata["floor_method"])
+print(pose3d_global.metadata["floor_contact_frames"])
+
 pose3d_global.to_csv(output_dir / "subject01_global.csv")
 pose3d_global.to_trc(output_dir / "subject01_global.trc")
 ```
+
+![Video pose overlay](docs/assets/images/stage-01-2d-pose-overlay.png)
 
 Or run the common video export path in one call:
 
@@ -108,6 +163,14 @@ animation = mm.animate(
 )
 animation.show()
 ```
+
+The package keeps all major signals inspectable. IK coordinates, estimated external loads, and inverse-dynamics outputs can each be reviewed before you trust the final animation.
+
+![IK coordinate signals](docs/assets/images/stage-04-ik-coordinate-signals.png)
+
+![Estimated force signals](docs/assets/images/stage-05-estimated-force-signals.png)
+
+![Inverse-dynamics output signals](docs/assets/images/stage-06-id-output-signals.png)
 
 Carried and constant loads created without `start_time` and `end_time` are applied over the full IK trial. Use explicit times only for loads that turn on and off during the movement.
 
@@ -251,6 +314,7 @@ The `examples/` folder includes ready-to-edit notebooks:
 ## Documentation
 
 - [Getting started](https://chags1313.github.io/monomech/getting-started/)
+- [Pipeline tour](https://chags1313.github.io/monomech/pipeline-tour/)
 - [Example notebooks](https://chags1313.github.io/monomech/examples/)
 - [API reference](https://chags1313.github.io/monomech/api/)
 - [Online GLB visualizer](https://chags1313.github.io/monomech/visualizer/)

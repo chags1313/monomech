@@ -246,13 +246,32 @@ def _make_markers_reference(osim, trc_path: Path, marker_weights: dict[str, floa
     raise TypeError("Could not create OpenSim MarkersReference. " + "; ".join(errors))
 
 
-def _make_coordinate_references(osim):
+def _coordinate_task_items(config: OpenSimIKConfig) -> dict[str, tuple[float, float | None]]:
+    items: dict[str, tuple[float, float | None]] = {
+        str(name): (float(weight), None)
+        for name, weight in config.coordinate_weights.items()
+    }
+    for name, value in config.coordinate_values.items():
+        key = str(name)
+        weight = items.get(key, (1.0, None))[0]
+        items[key] = (weight, float(value))
+    return items
+
+
+def _make_coordinate_references(osim, config: OpenSimIKConfig):
     coord_ref_type = getattr(osim, "SimTKArrayCoordinateReference", None)
     if coord_ref_type is None:
         raise AttributeError(
             "This OpenSim build does not expose SimTKArrayCoordinateReference."
         )
-    return coord_ref_type()
+    coordinate_references = coord_ref_type()
+    for name, (weight, value) in _coordinate_task_items(config).items():
+        if value is None:
+            continue
+        reference = osim.CoordinateReference(name, osim.Constant(float(value)))
+        reference.setWeight(float(weight))
+        coordinate_references.push_back(reference)
+    return coordinate_references
 
 
 def _make_direct_ik_solver(osim, model, markers_reference, coordinate_references):
@@ -840,6 +859,18 @@ def run_ik(
         task.setWeight(float(weight))
         ik.getIKTaskSet().cloneAndAppend(task)
 
+    # Coordinate weights
+    for coordinate, (weight, value) in _coordinate_task_items(config).items():
+        task = osim.IKCoordinateTask()
+        task.setName(str(coordinate))
+        task.setWeight(float(weight))
+        if value is None:
+            task.setValueType(osim.IKCoordinateTask.DefaultValue)
+        else:
+            task.setValueType(osim.IKCoordinateTask.ManualValue)
+            task.setValue(float(value))
+        ik.getIKTaskSet().cloneAndAppend(task)
+
     # Accuracy
     if hasattr(ik, "set_accuracy"):
         ik.set_accuracy(float(config.accuracy))
@@ -924,7 +955,7 @@ def _run_ik_fast(
         model = osim.Model(str(model_path))
         state = model.initSystem()
         markers_reference = _make_markers_reference(osim, trc_path, config.marker_weights)
-        coordinate_references = _make_coordinate_references(osim)
+        coordinate_references = _make_coordinate_references(osim, config)
         solver = _make_direct_ik_solver(
             osim,
             model,

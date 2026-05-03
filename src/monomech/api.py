@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -88,10 +89,12 @@ def estimate_pose(
             translation_method="hip_center" if root_centered else "pnp",
             smooth_root=True,
         )
-    pose = estimate_global_pose(pose3d_world, pose2d, config=global_config)
+    elif root_centered:
+        global_config = replace(global_config, translation_method="hip_center")
     if not floored:
-        pose.metadata = dict(pose.metadata or {})
-        pose.metadata["floored"] = False
+        global_config = replace(global_config, floor_method="none")
+
+    pose = estimate_global_pose(pose3d_world, pose2d, config=global_config)
     pose.metadata = {
         **(pose.metadata or {}),
         "pose2d_result": pose2d,
@@ -186,6 +189,9 @@ def run_ik(
     model: str | Path | None = None,
     output_dir: str | Path = "outputs/ik",
     backend: Literal["base", "fast"] | None = None,
+    marker_weights: dict[str, float] | None = None,
+    coordinate_weights: dict[str, float] | None = None,
+    coordinate_values: dict[str, float] | None = None,
     config: OpenSimIKConfig | None = None,
 ) -> StorageResult:
     """Run inverse kinematics from a scaled model, model path, or markers."""
@@ -205,7 +211,22 @@ def run_ik(
 
     config = config or OpenSimIKConfig()
     if backend is not None:
-        config.backend = backend
+        config = replace(config, backend=backend)
+    if marker_weights:
+        config = replace(
+            config,
+            marker_weights={**config.marker_weights, **dict(marker_weights)},
+        )
+    if coordinate_weights:
+        config = replace(
+            config,
+            coordinate_weights={**config.coordinate_weights, **dict(coordinate_weights)},
+        )
+    if coordinate_values:
+        config = replace(
+            config,
+            coordinate_values={**config.coordinate_values, **dict(coordinate_values)},
+        )
 
     result = _opensim_run_ik(
         trc_path=trc_path,

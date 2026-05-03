@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>monomech IK and ID visualizer</title>
+  <title>monomech visualizer</title>
   <style>
     :root { --ink:#17211e; --muted:#66736f; --line:#d9e2df; --panel:#ffffff; --bg:#f5f7f6; --accent:#0f766e; --force:#d65a31; --soft:#eef4f1; }
     * { box-sizing:border-box; }
@@ -38,7 +38,7 @@
 </head>
 <body>
   <header>
-    <h1>monomech IK and ID visualizer</h1>
+    <h1>monomech visualizer</h1>
     <div class="sub">Fast OpenSim body playback, optional GLB mesh playback, external-force arrows, complete IK coordinate plots, and complete inverse-dynamics traces.</div>
   </header>
   <main>
@@ -51,7 +51,7 @@
         <canvas id="threeScene"></canvas>
         <div class="legend">
           <span class="pill">teal: markers</span>
-          <span class="pill">gray: body proxies</span>
+          <span class="pill" id="modelLegend">gray: body proxies</span>
           <span class="pill">dark lines: marker skeleton</span>
           <span class="pill">orange: external forces</span>
         </div>
@@ -88,7 +88,7 @@
       </section>
     </div>
   </main>
-  <script id="payload" type="application/json">{"title": "monomech IK and ID visualizer", "markers": {"names": [], "time": [], "frames": [], "segments": []}, "bodies": {"names": [], "time": [], "frames": [], "segments": []}, "forces": null, "ik": {"path": null, "columns": [], "time": [], "series": {}}, "id": {"path": null, "columns": [], "time": [], "series": {}}, "glb_path": null, "force_scale": 0.35}</script>
+  <script id="payload" type="application/json">{"title": "monomech visualizer", "markers": {"names": [], "time": [], "frames": [], "segments": []}, "bodies": {"names": [], "time": [], "frames": [], "segments": []}, "forces": null, "ik": {"path": null, "columns": [], "time": [], "series": {}}, "id": {"path": null, "columns": [], "time": [], "series": {}}, "glb_path": null, "force_scale": 0.35}</script>
   <script type="importmap">
     {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"}}
   </script>
@@ -110,6 +110,10 @@
     const speedSelect = document.getElementById('speed');
     const status = document.getElementById('viewerStatus');
     const notice = document.getElementById('viewerNotice');
+    if (data.glb_path) {
+      notice.textContent = 'Inspect synchronized anatomical model motion, markers, external forces, IK, and inverse dynamics.';
+      document.getElementById('modelLegend').textContent = 'gray: skeletal model';
+    }
     let idx = 0, playing = false, lastTick = 0;
     let timelineFrames = Math.max(1, marker.frames.length);
     scrub.max = Math.max(0, marker.frames.length - 1);
@@ -118,9 +122,10 @@
     }
 
     function refreshStats() {
+      const hasGlbModel = Boolean(data.glb_path);
       document.getElementById('stats').innerHTML = [
         ['Frames', marker.frames.length],
-        ['Bodies', body.names?.length || 0],
+        [hasGlbModel ? 'GLB model' : 'Body proxies', hasGlbModel ? 'Loaded' : (body.names?.length || 0)],
         ['Markers', marker.names.length],
         ['Forces', (force.names || []).length],
         ['IK traces', data.ik?.columns?.length || 0],
@@ -278,6 +283,7 @@
       updateForces(idx);
       scrub.value = idx;
       setMixerToFrame(idx);
+      followGlbModel();
       const shownTime = marker.time.length
         ? (marker.time[idx] || 0)
         : (glbDuration && timelineFrames > 1 ? (idx / (timelineFrames - 1)) * glbDuration : 0);
@@ -289,10 +295,12 @@
       camera.aspect = rect.width / rect.height;
       camera.updateProjectionMatrix();
     }
+    let cameraFollowOffset = null;
     function frameScene() {
       const box = new THREE.Box3();
       let hasBox = false;
-      for (const group of [modelGroup, markersGroup, skeletonGroup]) {
+      const frameTargets = glbRoot ? [glbRoot] : [modelGroup, markersGroup, skeletonGroup];
+      for (const group of frameTargets) {
         const b = new THREE.Box3().setFromObject(group);
         if (Number.isFinite(b.min.x) && !b.isEmpty()) {
           if (!hasBox) box.copy(b); else box.union(b);
@@ -302,12 +310,25 @@
       if (!hasBox) return;
       const center = box.getCenter(new THREE.Vector3());
       const size = box.getSize(new THREE.Vector3());
-      const radius = Math.max(size.x, size.y, size.z, 0.5);
+      const extent = Math.max(size.x, size.y, size.z, 0.5);
+      const radius = extent * 1.12;
       controls.target.copy(center);
       camera.position.set(center.x + radius * 1.35, center.y + radius * 0.75, center.z + radius * 2.0);
       camera.near = Math.max(radius / 1000, 0.001);
       camera.far = Math.max(radius * 30, 10);
       camera.updateProjectionMatrix();
+      cameraFollowOffset = camera.position.clone().sub(controls.target);
+    }
+    function followGlbModel() {
+      if (!glbRoot || !cameraFollowOffset) return;
+      const box = new THREE.Box3().setFromObject(glbRoot);
+      if (!Number.isFinite(box.min.x) || box.isEmpty()) return;
+      const center = box.getCenter(new THREE.Vector3());
+      const currentOffset = camera.position.clone().sub(controls.target);
+      if (currentOffset.lengthSq() > 1e-9) cameraFollowOffset.copy(currentOffset);
+      controls.target.copy(center);
+      camera.position.copy(center).add(cameraFollowOffset);
+      controls.update();
     }
 
     const loader = new GLTFLoader();

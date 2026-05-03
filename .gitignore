@@ -8,6 +8,7 @@ __pycache__/
 # Build artifacts
 build/
 dist/
+site/
 *.egg-info/
 
 # Virtual environments
@@ -31,3 +32,4 @@ Thumbs.db
 # Local outputs
 outputs/*
 !outputs/index.html
+opensim.log

@@ -28,6 +28,12 @@ flowchart LR
   H --> J
 ```
 
+![IK coordinate signals](../assets/images/stage-04-ik-coordinate-signals.png)
+
+![Estimated external-load signals](../assets/images/stage-05-estimated-force-signals.png)
+
+![Inverse-dynamics output signals](../assets/images/stage-06-id-output-signals.png)
+
 ## Built-In Models
 
 ```python
@@ -112,6 +118,24 @@ ik = mm.run_ik(
     ),
 )
 ```
+
+For monocular video, pelvis orientation can be the first place noisy hip or trunk landmarks show up. Add a light coordinate task when the pelvis is tipping forward more than the movement warrants:
+
+```python
+ik = mm.run_ik(
+    scale,
+    marker_weights={
+        "left_hip": 3.0,
+        "right_hip": 3.0,
+        "left_shoulder": 2.0,
+        "right_shoulder": 2.0,
+    },
+    coordinate_weights={"pelvis_tilt": 8.0},
+    coordinate_values={"pelvis_tilt": 0.0},
+)
+```
+
+Use the smallest coordinate weight that removes the artifact. Very high values can hide real pelvis motion.
 
 ## 3. External Loads
 

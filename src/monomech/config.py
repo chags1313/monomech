@@ -27,14 +27,17 @@ class Pose3DWorldConfig:
 
 @dataclass(slots=True)
 class Pose3DGlobalConfig:
-    floor_method: Literal["auto", "feet_median", "min_y"] = "auto"
+    floor_method: Literal["auto", "foot_contact", "feet_median", "min_y", "none"] = "auto"
     translation_method: Literal["pnp", "hip_center"] = "pnp"
     pnp_min_points: int = 6
     focal_length_factor: float = 0.9
     smooth_root: bool = True
     root_smoothing_cutoff_hz: float = 4.0
-    floor_percentile: float = 0.5
-        # add these
+    floor_percentile: float = 90.0
+    floor_contact_velocity_percentile: float = 35.0
+    floor_contact_height_percentile: float = 35.0
+    floor_min_contact_samples: int = 6
+    floor_confidence_threshold: float = 0.2
     pnp_confidence_threshold: float = 0.2
 
 
@@ -68,6 +71,8 @@ class OpenSimScaleConfig:
 class OpenSimIKConfig:
     backend: Literal["base", "fast"] = "base"
     marker_weights: dict[str, float] = field(default_factory=dict)
+    coordinate_weights: dict[str, float] = field(default_factory=dict)
+    coordinate_values: dict[str, float] = field(default_factory=dict)
     accuracy: float = 1e-5
     output_prefix: str | None = None
     sanitize_marker_data: bool = True
